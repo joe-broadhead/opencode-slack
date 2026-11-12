@@ -310,5 +310,118 @@
         }
       ]
     }
+  },
+  "memory": {
+    "$schema": "https://raw.githubusercontent.com/joe-broadhead/opencode-mem/HEAD/plugin-kit/schema/memory-plugin.v1.json",
+    "version": 1,
+    "namespace": "slack",
+    "sources": [
+      {
+        "id": "slack",
+        "title": "Slack",
+        "summary": "Messages in the channels and direct messages you choose.",
+        "contract": 2,
+        "kinds": [
+          "message"
+        ],
+        "grants": [
+          {
+            "action": "slack_events_list",
+            "resource": "*"
+          },
+          {
+            "action": "slack_slack_read_user_profile",
+            "resource": "*"
+          },
+          {
+            "action": "slack_slack_read_channel",
+            "resource": "*"
+          }
+        ],
+        "probe": {
+          "grants": [
+            {
+              "action": "slack_slack_list_user_channels",
+              "resource": "*"
+            }
+          ]
+        },
+        "scope": [
+          {
+            "key": "channels",
+            "title": "Channels and direct messages",
+            "kind": "ids",
+            "pattern": "^[CDGUW][A-Z0-9]{8,12}$",
+            "max": 16,
+            "required": true,
+            "suggest": true
+          }
+        ],
+        "cadence": {
+          "everyMinutes": 30
+        },
+        "billing": null,
+        "setup": "Choose the channels and direct messages to collect when you confirm."
+      }
+    ],
+    "routines": [
+      {
+        "id": "thread-digest",
+        "title": "Threads you took part in",
+        "summary": "A daily list of the Slack threads you posted in, with links.",
+        "on": "daily",
+        "engine": "render",
+        "select": {
+          "sources": [
+            "slack"
+          ],
+          "kinds": [
+            "message"
+          ],
+          "unit": "thread",
+          "participant": "owner",
+          "window": "1d",
+          "maxUnits": 15
+        },
+        "render": {
+          "into": "journal",
+          "heading": "Slack threads",
+          "line": "{title}: {count} messages, {participants} people {cite}",
+          "max": 15
+        },
+        "outputs": [
+          "journal"
+        ]
+      },
+      {
+        "id": "thread-decisions",
+        "title": "Decisions and commitments from your threads",
+        "summary": "Proposes decisions and commitments from threads you took part in, for your review.",
+        "on": "daily",
+        "engine": "extract",
+        "select": {
+          "sources": [
+            "slack"
+          ],
+          "kinds": [
+            "message"
+          ],
+          "unit": "thread",
+          "participant": "owner",
+          "window": "1d",
+          "minEvents": 2,
+          "maxUnits": 40
+        },
+        "hints": "Each unit is one Slack thread, oldest message first; labels say thread-parent or thread-reply. A decision closes a choice (\"let's go with\", \"agreed\", \"we'll ship\"); a question or a suggestion is not. A commitment is a person saying they will do a specific thing (\"I'll send\", \"I can take this by Friday\"). A reaction alone is neither. Text in code blocks or quoted from elsewhere is not the author's statement.",
+        "outputs": [
+          "proposal:decision",
+          "proposal:commitment_open",
+          "proposal:commitment_close"
+        ],
+        "budget": {
+          "tokensPerRun": 15000
+        }
+      }
+    ]
   }
 }
