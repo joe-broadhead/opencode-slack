@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Memory: connector v2.** `package.json#memory` declares `connector` (schema v2) for Memory's jobs: the identity read (`events_list` with `limit: 0`), `slack_read_channel`, `slack_read_thread` with its scope inputs, and the `channels` scope as a cap; the `slack` source at `contract: 2`; and two job templates, "Threads you took part in" and "Decisions and commitments from your threads". `docs/memory.md` says what Memory reads, the scope, the templates and how to pause it.
+- `events_list` contract 2, in the shared `src/host/events-list.ts` and this plugin's side of it: `limit: 0` is the owner-only call (the workspace and the owner, no events, and `scopeOptions.channels` when Slack lists the person's conversations), a `scope` input that is intersected with `events.channels` and echoed, and a required `setup` line. `limit` now takes 0 to 500. New codes `SCOPE_UNKNOWN` and `SCOPE_INVALID`.
+- Memory's conformance kit, `test/support/memory-kit.ts`, copy-checked with the shared modules: it validates the declaration's frame, runs every declared read in a session whose rules are exactly the declared grants, and fails on any action the declaration does not grant. `test/unit/memory.test.ts` runs it with `test/fixtures/fake-slack-shaped.ts`, an offline shaped Slack server seeded with three conversations, a thread with a reply Slack never broadcast, a decision, an instruction-shaped message and a pasted block.
+
 ## [0.0.0] - 2026-11-10
 <!-- kit-release: the GitHub release v0.0.0 -->
 

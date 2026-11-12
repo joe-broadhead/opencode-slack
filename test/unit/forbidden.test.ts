@@ -38,7 +38,10 @@ const RULES: readonly Rule[] = [
     name: "config capabilities",
     pattern: /\bcapabilities\b/,
     example: "capabilities: { dispatch: true },",
-    except: { "test/host/fake-slack-mcp.ts": "the MCP handshake's server capabilities, not plugin config" },
+    except: {
+      "test/host/fake-slack-mcp.ts": "the MCP handshake's server capabilities, not plugin config",
+      "test/fixtures/fake-slack-shaped.ts": "the same MCP handshake, in the shaped fixture Memory's end-to-end run serves",
+    },
   },
   { name: "responsePolicy", pattern: /responsePolicy/, example: "responsePolicy: \"text-only\"," },
   { name: "Plugin.image and profile images", pattern: /\bimage\b|PROFILE_IMAGE/, example: "Plugin.define({ id, image: PROFILE_IMAGE, setup })" },

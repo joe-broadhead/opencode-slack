@@ -10,7 +10,9 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 | TUI | `src/tui.tsx` (`slack.workspace.tui`) | The palette command **Slack: Status** and `/slack`, which open one dialog that renders the status RPC. |
 | RPC contract | `src/rpc.ts` (`slack.workspace`) | The JSON Schema contract of the `status` method. Inlined into both bundles: the server registers it and the TUI calls it. `exports` lists only `.` and `./tui`. |
 | Tools RPC | `src/host/tools-rpc.ts` (`slack.workspace.tools`) | `describe`, one method per known read, and the owned method `events_list`, so a script can call them with no model ([Scripting](scripting.md)). A copy of a module shared by several plugins, with Slack's part in one marked block. Inlined into `dist/index.js`. |
-| Events list | `src/events.ts`, `src/host/events-list.ts` | `slack_events_list`, Memory's source of Slack events: the messages of the enabled channels as the shared `events_list` contract's events. `host/events-list.ts` is the contract, a copy every source plugin carries unchanged. |
+| Events list | `src/events.ts`, `src/host/events-list.ts` | `slack_events_list`, Memory's source of Slack events: the messages of the enabled channels as the shared `events_list` contract's events, and its contract-2 owner-only call and `scope`. `host/events-list.ts` is the contract, a copy every source plugin carries unchanged. |
+| Memory declaration | `package.json#memory`, `docs/memory.md` | The connector Memory reads from disk: the identity read, the declared reads and their scope inputs, the `channels` cap, the source at `contract: 2` and the two job templates. |
+| Memory kit | `test/support/memory-kit.ts`, `test/fixtures/fake-slack-shaped.ts` | The conformance kit (schema v2 frame, a recording permission context, `events_listConformance`), a copy every connector plugin carries, and an offline shaped Slack server with threads, an instruction-shaped message and a pasted block. `scripts/check-copies.mjs` pins the kit's hash. |
 
 ## Build
 
@@ -27,7 +29,7 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 - `skills.ts`: loads `skills/slack-search/SKILL.md`.
 - `host-version.ts`: the supported range check, and the tested releases.
 - `events.ts`: `slack_events_list` and its tools RPC method. It parses Slack's answers (JSON, else the labelled Markdown lines), reads each enabled channel after its cursor `ts`, halves a window too large for one call, and reads only through the host's executors.
-- `host/events-list.ts`: the shared `events_list` contract: the event type and limits, input, cursors, `makeEvent`, `fitPage`, the checks and the conformance test. `scripts/check-copies.mjs` pins its hash.
+- `host/events-list.ts`: the shared `events_list` contract, version 2: the event type and limits, input (including `scope`), cursors, `makeEvent`, `fitPage`, the checks (including the owner-only call's shape) and the conformance test. `scripts/check-copies.mjs` pins its hash.
 
 ## Runtime flow
 

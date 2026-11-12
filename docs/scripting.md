@@ -9,7 +9,7 @@ A script can call every Slack tool this plugin knows, with no model: a cron job,
 | read | `slack_search_public`, `slack_search_channels`, `slack_search_users`, `slack_read_channel`, `slack_read_thread`, `slack_read_user_profile`, `slack_read_canvas`, `slack_list_channel_members`, `slack_get_reactions`, `slack_list_user_channels`, `slack_read_list`, `slack_search_emojis`, `slack_search_public_and_private`, `slack_read_file` |
 | send | `slack_send_message`, `slack_send_message_draft`, `slack_schedule_message` |
 | write | `slack_create_canvas`, `slack_update_canvas`, `slack_add_reaction`, `slack_get_file_upload_url`, `slack_complete_file_upload`, `slack_create_conversation`, `slack_create_list`, `slack_update_list`, `slack_add_list_record`, `slack_update_list_record` |
-| events | `events_list`: `slack_events_list`, the messages posted since a cursor in the channels of the `events.channels` option, as Memory's events ([configuration](configuration.md#events-list)) |
+| events | `events_list`: `slack_events_list`, the messages posted since a cursor in the channels of the `events.channels` option, narrowed by the call's `scope`, as Memory's events ([configuration](configuration.md#events-list)); with `limit: 0` it answers only the workspace and the owner |
 | `describe` | not a tool: lists the methods, their classes and permission actions, whether OpenCode lists each tool now, each tool's input as JSON Schema, and — with a session — that session's permission for each |
 
 The class is the worst thing a tool can do. It never decides whether a call runs: the rules do. It is what `describe` reports and what a job's approval shows.

@@ -312,39 +312,80 @@
     }
   },
   "memory": {
-    "$schema": "https://raw.githubusercontent.com/joe-broadhead/opencode-mem/HEAD/plugin-kit/schema/memory-plugin.v1.json",
-    "version": 1,
+    "$schema": "https://raw.githubusercontent.com/joe-broadhead/opencode-mem/HEAD/plugin-kit/schema/memory-plugin.v2.json",
+    "version": 2,
     "namespace": "slack",
+    "connector": {
+      "accounts": "single",
+      "identity": {
+        "method": "read",
+        "input": {
+          "tool": "events_list",
+          "input": { "limit": 0 }
+        },
+        "grants": [
+          { "action": "slack_events_list", "resource": "*" },
+          { "action": "slack_slack_read_user_profile", "resource": "*" }
+        ],
+        "account": "$.account",
+        "owner": { "id": "$.owner.id", "label": "$.owner.label" }
+      },
+      "reads": [
+        {
+          "method": "read",
+          "input": { "tool": "slack_read_channel" },
+          "grants": [ { "action": "slack_slack_read_channel", "resource": "*" } ],
+          "scopeInputs": { "channel_id": "channels" },
+          "kinds": [ "message" ],
+          "cursor": "cursor",
+          "billing": null
+        },
+        {
+          "method": "read",
+          "input": { "tool": "slack_read_thread" },
+          "grants": [ { "action": "slack_slack_read_thread", "resource": "*" } ],
+          "scopeInputs": { "channel_id": "channels", "message_ts": "thread" },
+          "kinds": [ "message" ],
+          "cursor": "cursor",
+          "billing": null
+        }
+      ],
+      "scope": [
+        {
+          "key": "channels",
+          "title": "Channels and direct messages",
+          "kind": "ids",
+          "pattern": "^[CDGUW][A-Z0-9]{8,12}$",
+          "max": 16,
+          "required": true,
+          "suggest": true
+        },
+        {
+          "key": "thread",
+          "title": "One thread",
+          "kind": "ids",
+          "pattern": "^[0-9]{9,11}\\.[0-9]{6}$",
+          "max": 1,
+          "required": false,
+          "suggest": false
+        }
+      ],
+      "billing": null
+    },
     "sources": [
       {
         "id": "slack",
         "title": "Slack",
         "summary": "Messages in the channels and direct messages you choose.",
         "contract": 2,
-        "kinds": [
-          "message"
-        ],
+        "kinds": [ "message" ],
         "grants": [
-          {
-            "action": "slack_events_list",
-            "resource": "*"
-          },
-          {
-            "action": "slack_slack_read_user_profile",
-            "resource": "*"
-          },
-          {
-            "action": "slack_slack_read_channel",
-            "resource": "*"
-          }
+          { "action": "slack_events_list", "resource": "*" },
+          { "action": "slack_slack_read_user_profile", "resource": "*" },
+          { "action": "slack_slack_read_channel", "resource": "*" }
         ],
         "probe": {
-          "grants": [
-            {
-              "action": "slack_slack_list_user_channels",
-              "resource": "*"
-            }
-          ]
+          "grants": [ { "action": "slack_slack_list_user_channels", "resource": "*" } ]
         },
         "scope": [
           {
@@ -357,70 +398,81 @@
             "suggest": true
           }
         ],
-        "cadence": {
-          "everyMinutes": 30
-        },
+        "cadence": { "everyMinutes": 30 },
         "billing": null,
         "setup": "Choose the channels and direct messages to collect when you confirm."
       }
     ],
-    "routines": [
+    "templates": [
       {
-        "id": "thread-digest",
+        "id": "threads-you-took-part-in",
         "title": "Threads you took part in",
-        "summary": "A daily list of the Slack threads you posted in, with links.",
-        "on": "daily",
-        "engine": "render",
-        "select": {
-          "sources": [
-            "slack"
-          ],
-          "kinds": [
-            "message"
-          ],
-          "unit": "thread",
-          "participant": "owner",
-          "window": "1d",
-          "maxUnits": 15
+        "summary": "A daily journal line for each Slack thread you posted in, with a link.",
+        "trigger": {
+          "schedule": { "every": "1d" }
         },
-        "render": {
-          "into": "journal",
-          "heading": "Slack threads",
-          "line": "{title}: {count} messages, {participants} people {cite}",
-          "max": 15
+        "extract": [ { "use": "events_list", "connector": "slack.workspace" } ],
+        "transform": { "into": "events" },
+        "curate": {
+          "stages": [
+            {
+              "engine": "render",
+              "select": {
+                "sources": [ "slack" ],
+                "kinds": [ "message" ],
+                "unit": "thread",
+                "participant": "owner",
+                "window": "1d",
+                "maxUnits": 15
+              },
+              "render": {
+                "into": "journal",
+                "heading": "Slack threads",
+                "line": "{title}: {count} messages, {participants} people {cite}",
+                "max": 15
+              }
+            }
+          ]
         },
-        "outputs": [
-          "journal"
-        ]
+        "outputs": [ "journal" ]
       },
       {
         "id": "thread-decisions",
         "title": "Decisions and commitments from your threads",
-        "summary": "Proposes decisions and commitments from threads you took part in, for your review.",
-        "on": "daily",
-        "engine": "extract",
-        "select": {
-          "sources": [
-            "slack"
-          ],
-          "kinds": [
-            "message"
-          ],
-          "unit": "thread",
-          "participant": "owner",
-          "window": "1d",
-          "minEvents": 2,
-          "maxUnits": 40
+        "summary": "Proposes decisions and commitments from Slack threads you took part in, for your review.",
+        "trigger": {
+          "schedule": { "every": "1d" }
         },
-        "hints": "Each unit is one Slack thread, oldest message first; labels say thread-parent or thread-reply. A decision closes a choice (\"let's go with\", \"agreed\", \"we'll ship\"); a question or a suggestion is not. A commitment is a person saying they will do a specific thing (\"I'll send\", \"I can take this by Friday\"). A reaction alone is neither. Text in code blocks or quoted from elsewhere is not the author's statement.",
-        "outputs": [
-          "proposal:decision",
-          "proposal:commitment_open",
-          "proposal:commitment_close"
+        "extract": [
+          { "use": "events_list", "connector": "slack.workspace" },
+          {
+            "call": "slack_read_thread",
+            "connector": "slack.workspace",
+            "for": "thread",
+            "with": { "limit": 100 }
+          }
         ],
-        "budget": {
-          "tokensPerRun": 15000
-        }
+        "transform": { "into": "events" },
+        "curate": {
+          "stages": [
+            {
+              "engine": "extract",
+              "select": {
+                "sources": [ "slack" ],
+                "kinds": [ "message" ],
+                "unit": "thread",
+                "participant": "owner",
+                "window": "1d",
+                "minEvents": 2,
+                "maxUnits": 40
+              },
+              "hints": "Each unit is one Slack thread, oldest message first; labels say thread-parent or thread-reply. A decision closes a choice (\"let's go with\", \"agreed\", \"we'll ship\"); a question or a suggestion is not. A commitment is a person saying they will do a specific thing (\"I'll send\", \"I can take this by Friday\"). A reaction alone is neither. Text in code blocks or quoted from elsewhere is not the author's statement.",
+              "outputs": [ "proposal:decision", "proposal:commitment_open", "proposal:commitment_close" ]
+            }
+          ]
+        },
+        "outputs": [ "proposal:decision", "proposal:commitment_open", "proposal:commitment_close" ],
+        "budget": { "tokensPerRun": 15000 }
       }
     ]
   }

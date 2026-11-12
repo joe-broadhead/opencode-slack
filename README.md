@@ -173,6 +173,22 @@ Add the address to the Slack app's **OAuth & Permissions → Redirect URLs** (or
 
 [docs/configuration.md](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md) lists every option, the scopes each tool needs, the permission rules and the status model.
 
+## Memory
+
+Memory (opencode-mem) can read Slack through this plugin, as a **read-only connector**: it lists messages as events,
+and it curates them into memories and pages itself. Nothing is written through this plugin, and no token or extra
+sign-in is involved.
+
+- **What it reads:** `events_list` over the conversations in the `events.channels` option, narrowed by the channels you
+  confirm in Memory. It reads them with `slack_read_channel` and `slack_read_user_profile`, and a thread job also reads
+  `slack_read_thread`, because a channel read lists only the replies Slack also sent to the channel.
+- **The scope is a cap:** a confirmed channel outside `events.channels` is never read. `events.channels` is the list of
+  what this plugin may read at all.
+- **Pause it in Memory,** in the console's Sources area; narrow it by removing ids from `events.channels`.
+
+[Memory](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/memory.md) has the declaration, the reads and
+their permission actions, the templates, and the local fixture and conformance kit that test all of it without Slack.
+
 ## Organisation rollout
 
 Put the client ID of your organisation's Slack app in the system configuration, so members have nothing to set up: they see no **Slack app client ID** entry and only run `/connect` and choose **Slack** to sign in. OpenCode reads the system configuration from `/Library/Application Support/opencode/opencode.json` on macOS (or the `ai.opencode.managed` managed-preferences domain) and from `/etc/opencode/opencode.json` on Linux:
@@ -213,8 +229,10 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | `connected` | none | Ready. The next step reads `Nothing to do.` | If status names agents without default rules, put the default rules first in their own permissions (see above). |
 | — | `STATUS_UNAVAILABLE` | Status itself could not be read. | Run `/slack-status` again in a moment. |
 | — | `SKILLS_INVALID` | A bundled skill is missing or has invalid frontmatter, so the plugin does not load. | Reinstall the plugin: `opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.0`, then `opencode plugin add github:joe-broadhead/opencode-slack#v0.0.0`, then `opencode reload`. |
-| — | `INPUT_INVALID` | The `events_list` input is invalid; the message names the problems. | Pass `since`, `cursor`, `limit`, `account` or `source` as the tool's schema describes them. |
+| — | `INPUT_INVALID` | The `events_list` input is invalid; the message names the problems. | Pass `since`, `cursor`, `limit`, `account`, `scope` or `source` as the tool's schema describes them. |
 | — | `SOURCE_UNKNOWN` | This plugin lists only the source `slack`. | Leave `source` out, or pass `slack`. |
+| — | `SCOPE_UNKNOWN` | The `scope` names a key this source does not read; `events_list` reads only `scope.channels`. | Pass `scope.channels`, the channels and direct messages to collect, or leave `scope` out. |
+| — | `SCOPE_INVALID` | A `scope.channels` value is not a Slack conversation or user id, lists a channel twice, or names more than 16. | Pass at most 16 unique channel and direct message ids, such as `C0123ABCD45`. |
 | — | `CURSOR_INVALID` | The cursor was not issued by `events_list` for this Slack workspace and sign-in. | Call `events_list` without a cursor, with `since`, to start again. |
 | — | `ACCOUNT_UNKNOWN` | The signed-in Slack workspace is not the account `events_list` was asked for. | Leave `account` out, or pass the signed-in workspace. |
 | — | `TOO_MANY_MESSAGES` | More messages were posted in a channel after the cursor or `since` than one `events_list` call reads. | Call `events_list` again with a later `since`, without a cursor. |

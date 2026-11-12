@@ -2,18 +2,19 @@
  * The events_list source contract: how Memory's collector reads what happened in a source since it last looked
  * (opencode-mem `docs/design/memory-v1-contracts.md` §2.3 and §4.5, `memory-funnel-v1.md` §4 and §5).
  *
- *   events_list({ since?, cursor?, limit?, account?, source? })
- *     → { source, account, owner, events, cursor, more, trust: "untrusted" }
+ *   events_list({ since?, cursor?, limit?, account?, source?, scope? })
+ *     → { source, account, owner, events, cursor, more, trust: "untrusted", scope, setup, scopeOptions? }
  *
  * A source plugin adds one read-only tool and tools-RPC method named `events_list`. It never writes, never asks and
  * never calls a model, so a scheduled check can run it with no one there. The rules, which `eventsListConformance`
  * tests against any source:
  *
  * - **Input.** `since` is an ISO date (a UTC day) or an ISO date-time with `Z` or an offset. `cursor` is a string a
- *   previous result of the same source and account returned. `limit` is an integer from 1 to 500, 100 by default.
- *   `account` names one of the source's accounts; without it the source uses its default. `source` names one of the
- *   plugin's sources (gws: `gmail`, later `calendar`, `drive`); without it the plugin uses its first, and it refuses a
- *   source it does not have. A cursor wins over `since`.
+ *   previous result of the same source and account returned. `limit` is an integer from 0 to 500, 100 by default, and
+ *   0 is contract 2's owner-only call. `account` names one of the source's accounts; without it the source uses its
+ *   default. `source` names one of the plugin's sources (gws: `gmail`, later `calendar`, `drive`); without it the
+ *   plugin uses its first, and it refuses a source it does not have. `scope` narrows the source to the values its
+ *   person confirmed. A cursor wins over `since`.
  *   With neither, the source starts `FIRST_RUN_HOURS` before now. Anything else is refused, and a cursor the source
  *   did not issue (another source, another account, a malformed one) is refused rather than restarted.
  * - **Events.** Each is a `SourceEvent`: the source's own record of one thing, normalised. `text` is at most 4096
@@ -29,6 +30,22 @@
  *   account (`{ id, label }`), which Memory checks against the person's binding before it stores anything. `trust` is
  *   always "untrusted": events are data, never instructions.
  *
+ * **Contract 2** (Memory Jobs design §9.1, plugin design §1.4), which `EVENTS_CONTRACT` names:
+ *
+ * - **`limit: 0` is the owner-only call.** It answers `source`, `account`, `owner` and `setup` with `events: []`,
+ *   `cursor: ""` and `more: false`, and reads nothing else; a source may add `scopeOptions`, the choices its person can
+ *   pick for each scope key (`[{ id, label }]`, at most `SCOPE_OPTIONS_MAX` per key). Memory calls it to check the
+ *   account on every run, and to fill the confirm dialog.
+ * - **`scope` in.** `{ <key>: string[] }`: the narrowing the person confirmed, for the source's own scope keys. A
+ *   source with an option that narrows the same key reads the intersection of the two, and its option alone when the
+ *   call names none. A key the source does not have is refused; a value its own option excludes is dropped, never read.
+ * - **`scope` out.** Every result echoes the scope it actually read, so a caller can see what it got (narrower than
+ *   the call's, never wider).
+ * - **`snapshot`** joins the event kinds, for state that is not an event: `external_id` is `<key>:<YYYY-MM-DD>`,
+ *   `labels` should name the key, and `metrics` is an optional map of at most 8 numbers.
+ * - **`setup`.** Required, at most `SETUP_MAX` characters: what the person must do before the source can list
+ *   anything, and empty when nothing is needed.
+ *
  * Shared module. Each source plugin keeps an identical copy at `src/host/events-list.ts`, because each bundle stands
  * alone; the plugin's `scripts/check-copies.mjs` fails its check when the copy differs from the one every source
  * plugin carries. Change it in every plugin at once, then update the hash there. It imports only `node:crypto`.
@@ -38,7 +55,10 @@ import { createHash } from "node:crypto"
 /** The tool's and the tools-RPC method's name. */
 export const EVENTS_LIST = "events_list"
 
-export const EVENT_KINDS = ["message", "meeting", "session", "bookmark", "issue", "pr", "commit", "doc", "event"] as const
+/** The contract's version, which a source's declaration names and Memory checks against this file's answers. */
+export const EVENTS_CONTRACT = 2
+
+export const EVENT_KINDS = ["message", "meeting", "session", "bookmark", "issue", "pr", "commit", "doc", "event", "snapshot"] as const
 export type EventKind = (typeof EVENT_KINDS)[number]
 
 /** The most characters each field takes, and the most items each list takes. */
@@ -59,10 +79,26 @@ export const EVENT_LIMITS = {
   ownerId: 320,
   ownerLabel: 200,
   cursor: 1024,
+  setup: 300,
+  scopeKey: 24,
+  scopeValue: 128,
+  metricKey: 24,
 } as const
 
-/** `limit`'s default and inclusive range. */
-export const PAGE = { default: 100, min: 1, max: 500 } as const
+/** `limit`'s default and inclusive range. `limit: 0` is contract 2's owner-only call. */
+export const PAGE = { default: 100, min: 0, max: 500 } as const
+
+/** Contract 2's owner-only call: the account and owner, nothing else. */
+export const OWNER_ONLY_LIMIT = 0
+
+/** The most scope keys one call names, and the most values one key takes. */
+export const SCOPE_LIMITS = { keys: 4, values: 64 } as const
+
+/** The most `scopeOptions` entries one scope key answers. */
+export const SCOPE_OPTIONS_MAX = 200
+
+/** The most `metrics` numbers a `snapshot` event carries. */
+export const METRICS_MAX = 8
 
 /** The most bytes of JSON one result holds. A source stops early, and says `more`, rather than pass it. */
 export const MAX_PAGE_BYTES = 900_000
@@ -96,6 +132,8 @@ export interface SourceEvent {
   readonly labels: string[]
   /** `sha256:<hex>` of every other field, from `eventHash`. */
   readonly hash: string
+  /** `snapshot` only: at most `METRICS_MAX` numbers, keys `^[a-z][a-z0-9_]{0,23}$`. */
+  readonly metrics?: Readonly<Record<string, number>>
 }
 
 /** The signed-in source account. */
@@ -104,12 +142,22 @@ export interface EventsOwner {
   readonly label: string
 }
 
+/** One choice a scope key offers in the confirm dialog. */
+export interface ScopeOption {
+  readonly id: string
+  readonly label: string
+}
+
+/** The narrowing a call names, and the one a result echoes: the source's own scope keys to their values. */
+export type EventsScope = Readonly<Record<string, readonly string[]>>
+
 export interface EventsListInput {
   readonly since?: string
   readonly cursor?: string
   readonly limit?: number
   readonly account?: string
   readonly source?: string
+  readonly scope?: EventsScope
 }
 
 export interface EventsListResult {
@@ -119,9 +167,16 @@ export interface EventsListResult {
   readonly account: string
   readonly owner: EventsOwner
   readonly events: SourceEvent[]
+  /** Empty only on the owner-only call (`limit: 0`), which reads no events and so has nothing to continue from. */
   readonly cursor: string
   readonly more: boolean
   readonly trust: typeof TRUST
+  /** The scope this result read, echoing the call's or the source's own narrowing. */
+  readonly scope: EventsScope
+  /** What the person must do before this source can list anything; empty when nothing is needed. */
+  readonly setup: string
+  /** The choices each scope key offers, on the owner-only call; at most `SCOPE_OPTIONS_MAX` each. */
+  readonly scopeOptions?: Readonly<Record<string, readonly ScopeOption[]>>
 }
 
 /** An input after `parseEventsListInput`: `since` in epoch milliseconds, `limit` with its default. */
@@ -131,6 +186,16 @@ export interface EventsListRequest {
   readonly limit: number
   readonly account?: string
   readonly source?: string
+  readonly scope?: EventsScope
+}
+
+/** Where a result's own fields come from, beyond the events: `eventsListResult` fills the rest. */
+export interface EventsListMeta {
+  readonly cursor: string
+  readonly more: boolean
+  readonly scope: EventsScope
+  readonly setup: string
+  readonly scopeOptions?: Readonly<Record<string, readonly ScopeOption[]>>
 }
 
 // ── Input ───────────────────────────────────────────────────────────────
@@ -141,7 +206,11 @@ export const SINCE_PATTERN = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{
 /** A source's name: a lowercase word such as gmail or history. */
 export const SOURCE_PATTERN = /^[a-z][a-z0-9-]*$/
 
-const INPUT_KEYS: readonly string[] = ["since", "cursor", "limit", "account", "source"]
+const INPUT_KEYS: readonly string[] = ["since", "cursor", "limit", "account", "source", "scope"]
+/** A scope key: a lowercase word, as a source's declaration names it. */
+export const SCOPE_KEY_PATTERN = /^[a-z][a-z0-9]{0,23}$/
+/** A snapshot metric key: lowercase words joined by `_`. */
+export const METRIC_KEY_PATTERN = /^[a-z][a-z0-9_]{0,23}$/
 /** True when the text has a control character (U+0000 to U+001F, or U+007F). */
 const hasControl = (text: string) => [...text].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f)
 
@@ -154,12 +223,42 @@ export function sinceTime(since: string): number | undefined {
   return Number.isFinite(time) ? time : undefined
 }
 
+/** One scope value's problems, one sentence each: a non-empty line of at most `EVENT_LIMITS.scopeValue`. */
+function scopeValueProblems(value: unknown, where: string): string[] {
+  if (typeof value !== "string" || value.length === 0 || value.length > EVENT_LIMITS.scopeValue || hasControl(value) || value.trim() !== value) {
+    return [`${where} must be a non-empty line of at most ${EVENT_LIMITS.scopeValue} characters`]
+  }
+  return []
+}
+
+/** A requested scope's problems: at most `SCOPE_LIMITS.keys` keys, each a lowercase word with 1 to 64 unique values. */
+export function scopeProblems(scope: unknown, where = "scope"): string[] {
+  if (!plainObject(scope)) return [`${where} must be an object of scope keys to their values`]
+  const problems: string[] = []
+  const entries = Object.entries(scope)
+  if (entries.length > SCOPE_LIMITS.keys) problems.push(`${where} names ${entries.length} keys, over ${SCOPE_LIMITS.keys}`)
+  for (const [key, values] of entries) {
+    const at = `${where}.${key}`
+    if (!SCOPE_KEY_PATTERN.test(key)) problems.push(`${where} has the key "${key}", which is not a lowercase word of at most ${EVENT_LIMITS.scopeKey} characters`)
+    if (values === undefined || values === null) continue
+    if (!Array.isArray(values)) {
+      problems.push(`${at} must be a list of values`)
+      continue
+    }
+    if (values.length === 0) problems.push(`${at} must name at least one value, or leave the key out`)
+    if (values.length > SCOPE_LIMITS.values) problems.push(`${at} names ${values.length} values, over ${SCOPE_LIMITS.values}`)
+    for (const value of values) problems.push(...scopeValueProblems(value, at))
+    if (new Set(values).size !== values.length) problems.push(`${at} repeats a value`)
+  }
+  return problems
+}
+
 /** The input checked and normalised, or the problems with it, one sentence each, naming fields and never values. */
 export function parseEventsListInput(input: unknown): { ok: true; value: EventsListRequest } | { ok: false; problems: string[] } {
   const value = input === undefined || input === null ? {} : input
   if (!plainObject(value)) return { ok: false, problems: ["the input must be an object"] }
   const problems = Object.keys(value).filter((key) => !INPUT_KEYS.includes(key)).map((key) => `"${key}" is not an input of events_list`)
-  const { since, cursor, limit, account, source } = value
+  const { since, cursor, limit, account, source, scope } = value
   let time: number | undefined
   if (since !== undefined) {
     time = typeof since === "string" ? sinceTime(since) : undefined
@@ -177,6 +276,7 @@ export function parseEventsListInput(input: unknown): { ok: true; value: EventsL
   if (source !== undefined && (typeof source !== "string" || source.length > EVENT_LIMITS.source || !SOURCE_PATTERN.test(source))) {
     problems.push(`"source" must be a source's name, a lowercase word such as gmail`)
   }
+  if (scope !== undefined) problems.push(...scopeProblems(scope))
   if (problems.length > 0) return { ok: false, problems }
   return {
     ok: true,
@@ -186,6 +286,7 @@ export function parseEventsListInput(input: unknown): { ok: true; value: EventsL
       limit: (limit as number | undefined) ?? PAGE.default,
       ...(account === undefined ? {} : { account: account as string }),
       ...(source === undefined ? {} : { source: source as string }),
+      ...(scope === undefined ? {} : { scope: scope as EventsScope }),
     },
   }
 }
@@ -248,6 +349,7 @@ export function eventHash(event: Omit<SourceEvent, "hash">): string {
     event.text,
     event.url,
     event.labels,
+    event.metrics ?? null,
   ]
   return `sha256:${createHash("sha256").update(JSON.stringify(fields)).digest("hex")}`
 }
@@ -266,6 +368,8 @@ export interface EventDraft {
   readonly text?: string | null
   readonly url?: string | null
   readonly labels?: readonly string[]
+  /** `snapshot` only: numbers for the state it records. */
+  readonly metrics?: Readonly<Record<string, number>>
 }
 
 const clean = (text: string) => text.replaceAll("\u0000", "")
@@ -293,6 +397,7 @@ export function makeEvent(draft: EventDraft): SourceEvent {
   const labels = [...new Set((draft.labels ?? []).map((label) => oneLine(label).replace(/\s/g, "-")).filter((label) => label.length > 0 && label.length <= EVENT_LIMITS.label))].slice(0, EVENT_LIMITS.labels)
   const url = draft.url && /^https:\/\/\S+$/.test(draft.url) && draft.url.length <= EVENT_LIMITS.url ? draft.url : null
   const thread = draft.thread ? oneLine(draft.thread) || null : null
+  const metrics = draft.metrics === undefined ? undefined : Object.fromEntries(Object.entries(draft.metrics).filter(([key, value]) => METRIC_KEY_PATTERN.test(key) && Number.isFinite(value)).slice(0, METRICS_MAX))
   const event = {
     source: draft.source,
     account: draft.account,
@@ -305,6 +410,7 @@ export function makeEvent(draft: EventDraft): SourceEvent {
     text: cut(clean(draft.text ?? "").trim(), EVENT_LIMITS.text),
     url,
     labels,
+    ...(metrics === undefined ? {} : { metrics }),
   }
   return { ...event, hash: eventHash(event) }
 }
@@ -340,9 +446,20 @@ export interface EventsListIdentity {
   readonly owner: EventsOwner
 }
 
-/** A result, with its source, account, owner and trust marker. */
-export function eventsListResult(identity: EventsListIdentity, events: readonly SourceEvent[], cursor: string, more: boolean): EventsListResult {
-  return { source: identity.source, account: identity.account, owner: identity.owner, events: [...events], cursor, more, trust: TRUST }
+/** A result, with its source, account, owner, trust marker, scope echo and setup line. */
+export function eventsListResult(identity: EventsListIdentity, events: readonly SourceEvent[], meta: EventsListMeta): EventsListResult {
+  const result: EventsListResult = {
+    source: identity.source,
+    account: identity.account,
+    owner: identity.owner,
+    events: [...events],
+    cursor: meta.cursor,
+    more: meta.more,
+    trust: TRUST,
+    scope: meta.scope,
+    setup: meta.setup,
+  }
+  return meta.scopeOptions === undefined ? result : { ...result, scopeOptions: meta.scopeOptions }
 }
 
 // ── Checks ──────────────────────────────────────────────────────────────
@@ -351,6 +468,8 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/
 const ROLE = /^[a-z][a-z0-9_-]*$/
 const SCHEMED = /^[a-z][a-z0-9+.-]*:\S+$/
 const HASH = /^sha256:[0-9a-f]{64}$/
+/** A snapshot's external id: its key and the UTC day it records, so there is at most one per key per day. */
+const SNAPSHOT_ID = /^[a-z][a-z0-9]{0,23}:\d{4}-\d{2}-\d{2}$/
 
 const text = (value: unknown, max: number, empty = false): value is string =>
   typeof value === "string" && value.length <= max && (empty || value.length > 0) && !value.includes("\u0000")
@@ -360,14 +479,17 @@ const line = (value: unknown, max: number, empty = false): value is string => te
 export function eventProblems(event: unknown, where = "event"): string[] {
   if (!plainObject(event)) return [`${where} is not an object`]
   const problems: string[] = []
-  const keys = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash"]
+  const keys = ["source", "account", "external_id", "kind", "occurred_at", "thread", "actors", "title", "text", "url", "labels", "hash", "metrics"]
   for (const key of Object.keys(event)) if (!keys.includes(key)) problems.push(`${where} has the field "${key}", which the contract does not define`)
-  for (const key of keys) if (!Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`)
+  for (const key of keys) if (key !== "metrics" && !Object.hasOwn(event, key)) problems.push(`${where} has no "${key}"`)
   const e = event as Record<string, unknown>
   if (!line(e.source, EVENT_LIMITS.source) || !SOURCE_PATTERN.test(e.source)) problems.push(`${where}.source must be a lowercase name such as gmail`)
   if (!line(e.account, EVENT_LIMITS.account)) problems.push(`${where}.account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`)
   if (!line(e.external_id, EVENT_LIMITS.externalId)) problems.push(`${where}.external_id must be a non-empty id of at most ${EVENT_LIMITS.externalId} characters`)
   if (!(EVENT_KINDS as readonly unknown[]).includes(e.kind)) problems.push(`${where}.kind must be one of ${EVENT_KINDS.join(", ")}`)
+  if (e.kind === "snapshot" && typeof e.external_id === "string" && !SNAPSHOT_ID.test(e.external_id)) {
+    problems.push(`${where}.external_id must be <key>:<YYYY-MM-DD> for a snapshot`)
+  }
   if (typeof e.occurred_at !== "string" || !ISO_UTC.test(e.occurred_at) || !Number.isFinite(Date.parse(e.occurred_at))) {
     problems.push(`${where}.occurred_at must be a UTC ISO date-time ending in Z`)
   }
@@ -397,7 +519,19 @@ export function eventProblems(event: unknown, where = "event"): string[] {
     }
   }
   if (typeof e.hash !== "string" || !HASH.test(e.hash)) problems.push(`${where}.hash must be sha256: and 64 hex digits`)
-  else if (problems.length === 0) {
+  if (e.metrics !== undefined) {
+    const metrics = plainObject(e.metrics) ? e.metrics : undefined
+    const entries = Object.entries(metrics ?? {})
+    if (metrics === undefined || entries.length === 0 || entries.length > METRICS_MAX) problems.push(`${where}.metrics must be an object of 1 to ${METRICS_MAX} numbers`)
+    else {
+      for (const [key, value] of entries) {
+        if (!METRIC_KEY_PATTERN.test(key)) problems.push(`${where}.metrics has the key "${key}", which must be lowercase words joined by "_"`)
+        if (typeof value !== "number" || !Number.isFinite(value)) problems.push(`${where}.metrics.${key} must be a number`)
+      }
+    }
+    if (e.kind !== "snapshot") problems.push(`${where}.metrics is only for a snapshot`)
+  }
+  if (problems.length === 0) {
     const { hash, ...rest } = e as unknown as SourceEvent
     if (eventHash(rest) !== hash) problems.push(`${where}.hash is not the eventHash of its fields`)
   }
@@ -408,7 +542,7 @@ export function eventProblems(event: unknown, where = "event"): string[] {
 export function resultProblems(result: unknown, limit: number = PAGE.max): string[] {
   if (!plainObject(result)) return ["the result is not an object"]
   const problems: string[] = []
-  const keys = ["source", "account", "owner", "events", "cursor", "more", "trust"]
+  const keys = ["source", "account", "owner", "events", "cursor", "more", "trust", "scope", "setup", "scopeOptions"]
   for (const key of Object.keys(result)) if (!keys.includes(key)) problems.push(`the result has the field "${key}", which the contract does not define`)
   const { source, account } = result
   const named = line(source, EVENT_LIMITS.source) && SOURCE_PATTERN.test(source)
@@ -418,10 +552,44 @@ export function resultProblems(result: unknown, limit: number = PAGE.max): strin
   if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
     problems.push("the result's owner must be { id, label }, two non-empty lines")
   }
+  const ownerOnly = limit === OWNER_ONLY_LIMIT
   const cursor = result["cursor"]
-  if (typeof cursor !== "string" || cursor.length === 0 || cursor.length > EVENT_LIMITS.cursor) problems.push(`the result's cursor must be a non-empty string of at most ${EVENT_LIMITS.cursor} characters`)
+  if (typeof cursor !== "string" || cursor.length > EVENT_LIMITS.cursor || (cursor.length === 0 && !ownerOnly)) {
+    problems.push(`the result's cursor must be a non-empty string of at most ${EVENT_LIMITS.cursor} characters (and empty only on the owner-only call)`)
+  }
   if (typeof result["more"] !== "boolean") problems.push("the result's more must be true or false")
+  if (ownerOnly && result["more"] !== false) problems.push("the owner-only call must say more: false")
   if (result["trust"] !== TRUST) problems.push(`the result's trust must be "${TRUST}"`)
+  const scope = result["scope"]
+  if (scope === undefined) problems.push("the result has no scope, which contract 2 requires it to echo")
+  else problems.push(...scopeProblems(scope, "the result's scope"))
+  const setup = result["setup"]
+  if (typeof setup !== "string" || setup.length > EVENT_LIMITS.setup || setup.includes("\u0000")) {
+    problems.push(`the result's setup must be a string of at most ${EVENT_LIMITS.setup} characters (empty when nothing is needed)`)
+  }
+  const options = result["scopeOptions"]
+  if (options !== undefined) {
+    if (!plainObject(options)) problems.push("the result's scopeOptions must be an object of scope keys to their choices")
+    else {
+      for (const [key, choices] of Object.entries(options)) {
+        const at = `the result's scopeOptions.${key}`
+        if (!SCOPE_KEY_PATTERN.test(key)) problems.push(`${at} is not a scope key`)
+        if (!Array.isArray(choices) || choices.length > SCOPE_OPTIONS_MAX) {
+          problems.push(`${at} must be a list of at most ${SCOPE_OPTIONS_MAX} choices`)
+          continue
+        }
+        const seen = new Set<string>()
+        for (const [index, choice] of choices.entries()) {
+          if (!plainObject(choice) || !line(choice["id"], EVENT_LIMITS.scopeValue) || !line(choice["label"], EVENT_LIMITS.ownerLabel) || Object.keys(choice).some((field) => field !== "id" && field !== "label")) {
+            problems.push(`${at}[${index}] must be { id, label }, two non-empty lines`)
+            continue
+          }
+          if (seen.has(String(choice["id"]))) problems.push(`${at} repeats the choice ${String(choice["id"])}`)
+          seen.add(String(choice["id"]))
+        }
+      }
+    }
+  }
   const events = result["events"]
   if (!Array.isArray(events)) return [...problems, "the result's events must be a list"]
   if (events.length > limit) problems.push(`the result has ${events.length} events, over the limit of ${limit}`)
@@ -457,6 +625,10 @@ export interface ConformanceFixtures {
   readonly expected: readonly string[]
   /** The limit of the paged walk; 2 by default. */
   readonly pageSize?: number
+  /** The scope every call names; every result must echo it, or a narrower one. */
+  readonly scope?: EventsScope
+  /** A scope key the owner-only call must offer choices for, when the source declares one. */
+  readonly scopeOptionsKey?: string
 }
 
 export type EventsList = (input: EventsListInput) => Promise<unknown>
@@ -473,19 +645,34 @@ async function call(list: EventsList, input: EventsListInput): Promise<Listed> {
 
 const describeError = (error: unknown) => (error instanceof Error ? error.message.split("\n", 1)[0] : String(error))
 
+/** True when `echoed` names only values of `requested`, for only the keys it named: an echo never widens. */
+export function scopeWithin(echoed: EventsScope, requested: EventsScope): boolean {
+  return Object.entries(echoed).every(([key, values]) => {
+    const wanted = requested[key]
+    return wanted !== undefined && values.every((value) => wanted.includes(value))
+  })
+}
+
 /**
  * Every way `list` breaks the contract over `fixtures`, one sentence each; none when it keeps it. It lists everything
  * at once and page by page, checks each result, that the pages join up to exactly the expected events with nothing
  * repeated or skipped, that an earlier cursor lists the same page again, that the last cursor lists nothing, that every
  * result names the source and account, an empty first page included, that the owner, account and hashes hold steady,
- * and that a bad limit, a source the plugin does not have or a cursor it did not issue is refused. `list` runs the
- * source's events_list as its tool or RPC method does, input check included, over data that does not change.
+ * that a bad limit, a source the plugin does not have or a cursor it did not issue is refused, and — contract 2 — that
+ * the owner-only call (`limit: 0`) names the same account and owner and lists nothing, that a `scope` is echoed or
+ * narrowed and never widened, that an unknown scope key or a value outside the source's own narrowing is refused, and
+ * that `setup` holds on every result. `list` runs the source's events_list as its tool or RPC method does, input check
+ * included, over data that does not change.
  */
 export async function eventsListConformance(list: EventsList, fixtures: ConformanceFixtures): Promise<string[]> {
   const problems: string[] = []
-  const scope: EventsListInput = { ...(fixtures.account === undefined ? {} : { account: fixtures.account }), ...(fixtures.sourceInput ? { source: fixtures.source } : {}) }
-  const base: EventsListInput = { ...(fixtures.since === undefined ? {} : { since: fixtures.since }), ...scope }
-  const after = (cursor: string): EventsListInput => ({ cursor, ...scope })
+  const binding: EventsListInput = {
+    ...(fixtures.account === undefined ? {} : { account: fixtures.account }),
+    ...(fixtures.sourceInput ? { source: fixtures.source } : {}),
+    ...(fixtures.scope === undefined ? {} : { scope: fixtures.scope }),
+  }
+  const base: EventsListInput = { ...(fixtures.since === undefined ? {} : { since: fixtures.since }), ...binding }
+  const after = (cursor: string): EventsListInput => ({ cursor, ...binding })
   const pageSize = fixtures.pageSize ?? 2
   const since = fixtures.since === undefined ? undefined : sinceTime(fixtures.since)
   const owners = new Set<string>()
@@ -503,6 +690,7 @@ export async function eventsListConformance(list: EventsList, fixtures: Conforma
     const result = listed.result!
     if (result.source !== fixtures.source) problems.push(`${what}: the result names the source ${result.source}, not ${fixtures.source}`)
     if (fixtures.account !== undefined && result.account !== fixtures.account) problems.push(`${what}: the result names the account ${result.account}, not ${fixtures.account}`)
+    if (fixtures.scope !== undefined && !scopeWithin(result.scope, fixtures.scope)) problems.push(`${what}: the result echoes a scope wider than the one the call named`)
     accounts.add(result.account)
     owners.add(JSON.stringify(result.owner))
     if (fixtures.owner && JSON.stringify(result.owner) !== JSON.stringify({ id: fixtures.owner.id, label: fixtures.owner.label })) problems.push(`${what}: the owner is not the fixture's owner`)
@@ -555,8 +743,18 @@ export async function eventsListConformance(list: EventsList, fixtures: Conforma
   }
 
   // An empty first page still names its source and account, so Memory can bind a source that has nothing yet.
-  const empty = check(await call(list, { ...scope, since: "2999-01-01T00:00:00Z", limit: pageSize }), "an empty first page", pageSize)
+  const empty = check(await call(list, { ...binding, since: "2999-01-01T00:00:00Z", limit: pageSize }), "an empty first page", pageSize)
   if (empty && (empty.events.length > 0 || empty.more)) problems.push("a first page from a since in the future lists events, or says more")
+
+  // The owner-only call: contract 2's per-run account check, and nothing else read.
+  const ownerOnly = check(await call(list, { ...binding, limit: OWNER_ONLY_LIMIT }), "the owner-only call (limit 0)", OWNER_ONLY_LIMIT)
+  if (ownerOnly) {
+    if (ownerOnly.events.length > 0) problems.push("the owner-only call lists events")
+    if (fixtures.scopeOptionsKey !== undefined) {
+      const choices = ownerOnly.scopeOptions?.[fixtures.scopeOptionsKey]
+      if (choices === undefined || choices.length === 0) problems.push(`the owner-only call offers no scopeOptions.${fixtures.scopeOptionsKey}`)
+    }
+  }
 
   if (owners.size > 1) problems.push("the owner changes between calls")
   if (accounts.size > 1) problems.push("the account changes between calls")
@@ -567,10 +765,12 @@ export async function eventsListConformance(list: EventsList, fixtures: Conforma
     if (listed.error === undefined) problems.push(`${what} was not refused`)
   }
   await refused({ ...base, limit: PAGE.max + 1 }, `a limit of ${PAGE.max + 1}`)
-  await refused({ ...base, limit: 0 }, "a limit of 0")
   await refused({ ...after("not-a-cursor"), limit: pageSize }, "a malformed cursor")
   await refused({ ...after(encodeCursor(`${fixtures.source}-other`, {})), limit: pageSize }, "another source's cursor")
   await refused({ ...base, source: `${fixtures.source}-other`, limit: pageSize }, "a source the plugin does not have")
+  if (fixtures.scope !== undefined) {
+    await refused({ ...base, scope: { ...fixtures.scope, notakey: ["1"] }, limit: pageSize }, "a scope key the source does not have")
+  }
   return problems
 }
 
