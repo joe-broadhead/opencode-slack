@@ -61,7 +61,7 @@ The Slack tools are Slack's own. With Code Mode, which is on by default, agents 
 
 ### Mark as read
 
-`slack_mark_read` (script method `mark_read`) marks a conversation read up to a message, with Slack's `conversations.mark`. It is a write, and needs the conversation type's `:write` scope, which the default scopes lack: see [Mark as read](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#mark-as-read).
+`slack_mark_read` (script method `mark_read`) marks a conversation read with Slack's `conversations.mark`. A write, it needs the conversation type's `:write` scope, not in the default scopes: see [Mark as read](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#mark-as-read).
 
 ### Scripts
 
@@ -226,7 +226,7 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | — | `ACCOUNT_UNKNOWN` | The signed-in Slack workspace is not the account `events_list` was asked for. | Leave `account` out, or pass the signed-in workspace. |
 | — | `TOO_MANY_MESSAGES` | More messages were posted in a channel after the cursor or `since` than one `events_list` call reads. | Call `events_list` again with a later `since`, without a cursor. |
 | — | `UPSTREAM_UNREADABLE` | Slack's answer to a read `events_list` makes is in a shape it does not read. | Call the tool directly to see Slack's answer, and run `/slack-status`. |
-| — | `UPSTREAM_ERROR` | Slack refused a read `events_list` makes, such as a missing scope or a channel you cannot read, or refused `mark_read`. | Check that the channel id in `events.channels` is one you can read, then call `events_list` again with the same cursor. |
+| — | `UPSTREAM_ERROR` | Slack refused a read `events_list` makes, or `mark_read`'s `conversations.mark`. | `events_list`: check the channel id in `events.channels`, then retry with the same cursor. `mark_read`: check `channel_id` and `ts`. |
 | — | `TOOL_UNAVAILABLE` | OpenCode does not list a read `events_list` needs, or `slack` is your own server. | Wait a few seconds, then run `/slack-status` and follow its next step. |
 
 If status itself cannot be read, `/slack-status` says `STATUS_UNAVAILABLE`; run it again in a moment. If a bundled skill is missing or broken, OpenCode reports `SKILLS_INVALID` when it loads the plugin; reinstall it from its tag, as the Troubleshooting table says.
