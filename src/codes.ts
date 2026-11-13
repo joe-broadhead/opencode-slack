@@ -15,6 +15,7 @@ export type PluginCode =
   | "HOST_UNTESTED"
   | "INPUT_INVALID"
   | "OPTIONS_INVALID"
+  | "SCOPE_MISSING"
   | "SERVER_DISABLED"
   | "SCOPE_INVALID"
   | "SCOPE_UNKNOWN"
@@ -37,6 +38,7 @@ export const PLUGIN_CODES: readonly PluginCode[] = [
   "HOST_UNTESTED",
   "INPUT_INVALID",
   "OPTIONS_INVALID",
+  "SCOPE_MISSING",
   "SERVER_DISABLED",
   "SCOPE_INVALID",
   "SCOPE_UNKNOWN",

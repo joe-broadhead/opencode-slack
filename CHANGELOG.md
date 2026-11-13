@@ -10,6 +10,13 @@ All notable changes to this project are documented here. The format follows [Kee
 - `events_list` contract 2, in the shared `src/host/events-list.ts` (byte-identical to the gws pilot's copy, hash `9aa00fd…`) and this plugin's side of it: `limit: 0` is the owner-only call (the workspace and the owner, no events), a `scope` input that is intersected with `events.channels` and echoed, a required `setup` line, and an optional `gap` when a source restarts its window (Slack never does). `limit` takes 0 to 500. New codes `SCOPE_UNKNOWN` and `SCOPE_INVALID`.
 - The shared `src/host/tools-rpc.ts` at v2.3, byte for byte: a plugin-owned method may now resolve its own resource before dispatch (`resource(input)`), which is opt-in, so with no resolver every method keeps `*` as before. This plugin declares no resolver.
 - Memory's published connector kit at revision 7, vendored byte for byte and hash-pinned: `test/support/memory-kit.mjs` (the schema-v2 rules, read verbs, identities, scopes, templates, size), `conformance.mjs` (a recording permission context and the `events_list` contract check), `schema-check.mjs` and `memory-plugin.v2.json`. `test/support/connector-fixture.ts` adds the two checks the kit leaves to the plugin (the identity answer and `suggestBy`), and `test/unit/memory.test.ts` runs them all against `test/fixtures/fake-slack-shaped.ts`, an offline shaped Slack server with a thread, a decision, an instruction-shaped message and a pasted block.
+- Status's `account` (`teamId`, `userId`, `enterpriseId`), from `auth.test`. Thanks to @domeevans (#18).
+- The tools RPC's `status` method (`slack_status`, allowed at every `access`). Thanks to @domeevans (#18).
+- `slack_mark_read` / `mark_read` (write): Slack's `conversations.mark`. Needs a `:write` scope; `SCOPE_MISSING` without it. Thanks to @domeevans (#18).
+
+### Changed
+
+- **The plugin now reads the Slack token**, in `src/slack-api.ts` only, to call `auth.test` and `conversations.mark`, and never stores, logs or returns it.
 
 ## [0.0.0] - 2026-11-10
 <!-- kit-release: the GitHub release v0.0.0 -->
