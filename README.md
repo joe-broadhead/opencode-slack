@@ -242,6 +242,9 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | — | `SCOPE_UNKNOWN` | The `scope` names a key this source does not read; `events_list` reads only `scope.channels`. | Pass `scope.channels`, the channels and direct messages to collect, or leave `scope` out. |
 | — | `SCOPE_INVALID` | A `scope.channels` value is not a Slack conversation or user id, lists a channel twice, or names more than 16. | Pass at most 16 unique channel and direct message ids, such as `C0123ABCD45`. |
 | — | `CURSOR_INVALID` | The cursor was not issued by `events_list` for this Slack workspace and sign-in. | Call `events_list` without a cursor, with `since`, to start again. |
+| — | `CURSOR_EXPIRED` | The cursor's history is older than the 30 days this source keeps, so the answer would have a gap. | Call `events_list` without a cursor, with `since`, to start a fresh window. |
+| — | `SCHEMA_VIOLATION` | A detail read was called with fields that are not the event's own thread key. | Call it with the event's `thread` field, such as `slack-thread:C0123ABCD45:1700000000.000100`. |
+| — | `UNAVAILABLE` | Slack listed a message this source could not read this time; the page's `failed[]` names it. | Retry the same window: a failed entry holds the cursor back. |
 | — | `ACCOUNT_UNKNOWN` | The signed-in Slack workspace is not the account `events_list` was asked for. | Leave `account` out, or pass the signed-in workspace. |
 | — | `TOO_MANY_MESSAGES` | More messages were posted in a channel after the cursor or `since` than one `events_list` call reads. | Call `events_list` again with a later `since`, without a cursor. |
 | — | `UPSTREAM_UNREADABLE` | Slack's answer to a read `events_list` makes is in a shape it does not read. | Call the tool directly to see Slack's answer, and run `/slack-status`. |

@@ -81,6 +81,8 @@ function files(): string[] {
     .filter((entry) => entry.isFile() && entry.name !== ".DS_Store")
     .map((entry) => relative(REPO, join(entry.parentPath, entry.name)).split(sep).join("/"))
     .filter((path) => path !== SELF && !path.split("/").includes("node_modules"))
+    // Memory's vendored package copy: byte-identical to the published files, so not this repository's own code.
+    .filter((path) => !path.startsWith("vendor/source-contract/"))
     .sort()
 }
 
@@ -133,6 +135,8 @@ function shipped(): string[] {
     .map((entry) => relative(REPO, join(entry.parentPath, entry.name)).split(sep).join("/"))
     .concat(["README.md", "SECURITY.md", "CONTRIBUTING.md", "AGENTS.md", "CHANGELOG.md"])
     .filter((path) => path !== SELF && !path.split("/").includes("node_modules"))
+    // Memory's vendored package copy: byte-identical to the published files, so not this repository's own code.
+    .filter((path) => !path.startsWith("vendor/source-contract/"))
     .sort()
 }
 

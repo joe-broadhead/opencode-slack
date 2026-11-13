@@ -317,195 +317,38 @@
       ]
     }
   },
-  "memory": {
-    "$schema": "https://raw.githubusercontent.com/joe-broadhead/opencode-mem/HEAD/plugin-kit/schema/memory-plugin.v2.json",
-    "version": 2,
-    "namespace": "slack",
-    "connector": {
-      "accounts": "single",
-      "identity": {
-        "method": "events_list",
-        "input": { "limit": 0 },
-        "grants": [
-          { "action": "slack_events_list", "resource": "*" },
-          { "action": "slack_slack_read_user_profile", "resource": "*" }
-        ],
-        "account": "$.account",
-        "owner": { "id": "$.owner.id", "label": "$.owner.label" }
-      },
-      "reads": [
-        {
-          "method": "slack_read_channel",
-          "input": {  },
-          "grants": [ { "action": "slack_slack_read_channel", "resource": "*" } ],
-          "scopeInputs": { "channel_id": "channels" },
-          "kinds": [ "message" ],
-          "cursor": "cursor",
-          "billing": null
-        },
-        {
-          "method": "slack_read_thread",
-          "input": {  },
-          "grants": [ { "action": "slack_slack_read_thread", "resource": "*" } ],
-          "scopeInputs": {
-            "channel_id": { "perUnit": "thread_channel", "bind": "channels" },
-            "message_ts": { "perUnit": "thread_ts", "bind": "channels" }
-          },
-          "kinds": [ "message" ],
-          "cursor": "cursor",
-          "billing": null
-        }
-      ],
-      "scope": [
-        {
-          "key": "channels",
-          "title": "Channels and direct messages",
-          "kind": "ids",
-          "pattern": "^[CDGUW][A-Z0-9]{8,12}$",
-          "max": 16,
-          "required": true,
-          "suggest": true,
-          "suggestBy": {
-            "method": "slack_list_user_channels",
-            "input": {
-              "types": [ "public_channel", "private_channel", "im", "mpim" ],
-              "limit": 200
-            },
-            "grants": [ { "action": "slack_slack_list_user_channels", "resource": "*" } ],
-            "ids": "$.channels[*].id",
-            "labels": "$.channels[*].name"
-          }
-        }
-      ],
-      "billing": null
-    },
-    "sources": [
+  "sources": {
+    "contractVersion": 1,
+    "items": [
       {
-        "id": "slack",
-        "title": "Slack",
-        "summary": "Messages in the channels and direct messages you choose.",
-        "contract": 2,
-        "kinds": [ "message" ],
-        "grants": [
-          { "action": "slack_events_list", "resource": "*" },
-          { "action": "slack_slack_read_user_profile", "resource": "*" },
-          { "action": "slack_slack_read_channel", "resource": "*" }
-        ],
-        "scope": [
+        "id": "slack.messages",
+        "kind": "events",
+        "reads": "message",
+        "tool": "events_list",
+        "accounts": { "named": false },
+        "scope": {
+          "keys": [ "channels" ],
+          "describe": "Channels and direct messages to read.",
+          "suggest": {
+            "tool": "slack_list_user_channels",
+            "operations": [ "slack_list_user_channels" ]
+          }
+        },
+        "details": [
           {
-            "key": "channels",
-            "title": "Channels and direct messages",
-            "kind": "ids",
-            "pattern": "^[CDGUW][A-Z0-9]{8,12}$",
-            "max": 16,
-            "required": true,
-            "suggest": true
+            "id": "slack.messages.thread",
+            "tool": "slack_read_detail",
+            "from": [ "thread" ]
           }
         ],
-        "cadence": { "everyMinutes": 30 },
-        "billing": null,
-        "setupHint": "Choose the channels and direct messages to collect when you confirm."
-      }
-    ],
-    "templates": [
-      {
-        "id": "threads-you-took-part-in",
-        "title": "Threads you took part in",
-        "summary": "A daily journal line for each Slack thread you posted in, with a link.",
-        "trigger": {
-          "schedule": { "every": "1d" }
+        "permission": {
+          "events": "slack_events_list",
+          "operations": [ "slack_read_user_profile", "slack_read_channel", "slack_read_thread" ]
         },
-        "extract": {
-          "steps": [ { "use": "events_list", "connector": "slack.workspace", "source": "slack" } ]
-        },
-        "transform": { "into": "events" },
-        "curate": {
-          "stages": [
-            {
-              "engine": "render",
-              "select": {
-                "sources": [ "slack" ],
-                "kinds": [ "message" ],
-                "unit": "thread",
-                "participant": "owner",
-                "window": "1d",
-                "maxUnits": 15
-              },
-              "into": "journal",
-              "heading": "Slack threads",
-              "line": "{title}: {count} messages, {participants} people {cite}",
-              "max": 15
-            }
-          ]
-        },
-        "outputs": [ "journal" ]
-      },
-      {
-        "id": "thread-decisions",
-        "title": "Decisions and commitments from your threads",
-        "summary": "Proposes decisions and commitments from Slack threads you took part in, for your review.",
-        "trigger": {
-          "schedule": { "every": "1d" }
-        },
-        "extract": {
-          "steps": [
-            { "use": "events_list", "connector": "slack.workspace", "source": "slack" },
-            {
-              "call": "slack_read_thread",
-              "connector": "slack.workspace",
-              "for": "thread",
-              "with": { "limit": 100 },
-              "source": "slack"
-            }
-          ]
-        },
-        "transform": { "into": "events" },
-        "curate": {
-          "stages": [
-            {
-              "engine": "extract",
-              "select": {
-                "sources": [ "slack" ],
-                "kinds": [ "message" ],
-                "unit": "thread",
-                "participant": "owner",
-                "window": "1d",
-                "minEvents": 2,
-                "maxUnits": 40
-              },
-              "hints": "Each unit is one Slack thread, oldest message first; labels say thread-parent or thread-reply. A decision closes a choice (\"let's go with\", \"agreed\", \"we'll ship\"); a question or a suggestion is not. A commitment is a person saying they will do a specific thing (\"I'll send\", \"I can take this by Friday\"). A reaction alone is neither. Text in code blocks or quoted from elsewhere is not the author's statement.",
-              "outputs": [ "proposal:decision", "proposal:commitment_open", "proposal:commitment_close" ]
-            }
-          ]
-        },
-        "outputs": [ "proposal:commitment_close", "proposal:commitment_open", "proposal:decision" ],
-        "budget": { "tokensPerRun": 15000 }
-      },
-      {
-        "id": "threads-project-page",
-        "title": "Threads you took part in, on a project page",
-        "summary": "A cited block of the Slack threads you posted in, with the replies a channel read never lists.",
-        "trigger": { "schedule": { "every": "1d" } },
-        "extract": {
-          "steps": [
-            { "use": "events_list", "connector": "slack.workspace", "source": "slack" },
-            { "call": "slack_read_thread", "connector": "slack.workspace", "source": "slack", "for": "thread", "with": { "limit": 100 } }
-          ]
-        },
-        "transform": { "into": "events" },
-        "curate": {
-          "stages": [
-            {
-              "engine": "render",
-              "select": { "sources": [ "slack" ], "kinds": [ "message" ], "unit": "thread", "participant": "owner", "window": "7d", "maxUnits": 15 },
-              "into": "section:Threads",
-              "heading": "Slack threads",
-              "line": "{title}: {count} messages {cite}",
-              "max": 15
-            }
-          ]
-        },
-        "outputs": [ "section:Threads" ]
+        "private": true,
+        "cost": { "class": "free" },
+        "maxBytes": 262144,
+        "urlHosts": [ "*.slack.com" ]
       }
     ]
   }

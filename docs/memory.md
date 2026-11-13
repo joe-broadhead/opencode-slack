@@ -2,8 +2,9 @@
 
 Memory (opencode-mem) runs **jobs** that read from OpenCode plugins and curate what they read into memories and linked
 pages. This plugin is a **read-only connector**: Memory owns the schedule, the budgets and every write, and this plugin
-only lists what happened in Slack. The plugin's declaration is the top-level `memory` key in `package.json`, schema
-**v2**; Memory reads it from the installed package on disk, so changing it at runtime changes nothing.
+only lists what happened in Slack. The declaration is the top-level **`sources`** key in `package.json`, **contract
+version 1** (app#2346), read from the installed package on disk; changing it at runtime changes nothing. The job
+templates have moved into Memory, which is where a consumer's own data belongs.
 
 Nothing here is a new credential or a new connection: every read runs through OpenCode's own Slack sign-in and its own
 permission rules, with the same tool Slack's server lists.

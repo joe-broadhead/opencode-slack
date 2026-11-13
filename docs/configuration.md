@@ -481,6 +481,9 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `SCOPE_INVALID` | none: `slack_events_list` | Pass channel and direct message ids, such as C0123ABCD45. |
 | `SOURCE_UNKNOWN` | none: `slack_events_list` | Leave "source" out, or pass "slack". |
 | `CURSOR_INVALID` | none: `slack_events_list` | Call events_list without a cursor, with since, to start again. |
+| `CURSOR_EXPIRED` | none: `slack_events_list` | Call events_list without a cursor, with since, to start a fresh window. |
+| `SCHEMA_VIOLATION` | none: the detail read | Call it with the event's thread field. |
+| `UNAVAILABLE` | none: `slack_events_list`, a message could not be read | Retry the same window |
 | `ACCOUNT_UNKNOWN` | none: `slack_events_list` | Leave "account" out, or pass the signed-in workspace. |
 | `TOO_MANY_MESSAGES` | none: `slack_events_list` | Call events_list again with a later since, without a cursor. |
 | `UPSTREAM_UNREADABLE` | none: `slack_events_list` | Call the tool directly to see Slack's answer, and run /slack-status. |
@@ -490,6 +493,9 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `SOURCE_UNKNOWN` | none: `slack_events_list` | Leave "source" out, or pass "slack". |
 | `ACCOUNT_UNKNOWN` | none: `slack_events_list` | Leave "account" out, or pass the workspace the message names. |
 | `CURSOR_INVALID` | none: `slack_events_list` | Call events_list without a cursor, with since, to start again. |
+| `CURSOR_EXPIRED` | none: `slack_events_list` | Call events_list without a cursor, with since, to start a fresh window. |
+| `SCHEMA_VIOLATION` | none: the detail read | Call it with the event's thread field. |
+| `UNAVAILABLE` | none: `slack_events_list`, a message could not be read | Retry the same window |
 | `TOO_MANY_MESSAGES` | none: `slack_events_list` | Call events_list again with a later since, without a cursor. |
 | `UPSTREAM_ERROR` | none: `slack_events_list`, Slack refused a read (the message names the channel) | Check that the channel id in events.channels is one you can read, then call events_list again with the same cursor. |
 | `UPSTREAM_UNREADABLE` | none: `slack_events_list`, Slack answered in a shape it does not read | Call the tool the message names directly to see Slack's answer, and run /slack-status. |

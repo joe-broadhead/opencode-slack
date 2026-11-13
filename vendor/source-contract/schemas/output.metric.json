@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "label": {
+      "type": "string",
+      "maxLength": 40
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "maxLength": 20
+        }
+      ]
+    },
+    "unit": {
+      "type": "string",
+      "maxLength": 10
+    },
+    "delta": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "up",
+            "down",
+            "flat"
+          ]
+        },
+        "good": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "value",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
+    "spark": {
+      "maxItems": 48,
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    }
+  },
+  "required": [
+    "label",
+    "value"
+  ],
+  "additionalProperties": false
+}

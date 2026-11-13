@@ -4,6 +4,7 @@ import { registerAppIntegration, resolveClient, sameClient, serverNamer, type Cl
 import { isSupportedHost, isTestedHost } from "./host-version.js"
 import { METHODS, registerToolsRpc } from "./host/tools-rpc.js"
 import { eventsMethod, eventsTool, type EventsToolOptions } from "./events.js"
+import { detailMethod, probeMethod } from "./source.js"
 import { STATUS_WAIT_MS, workspaceIdentity } from "./identity.js"
 import { markReadMethod, markReadTool, type MarkReadOptions } from "./mark-read.js"
 import { slackApi } from "./slack-api.js"
@@ -180,7 +181,7 @@ export default Plugin.define({
       : await registerToolsRpc(ctx, {
         methods: events === undefined || marking === undefined
           ? METHODS
-          : [...METHODS, eventsMethod(events), markReadMethod(marking), statusMethod(() => status())],
+          : [...METHODS, eventsMethod(events), probeMethod(events), detailMethod(events), markReadMethod(marking), statusMethod(() => status())],
         mcp: {
           server: SERVER,
           managed: () => !nameInUse,

@@ -13,11 +13,8 @@ const END = "// <<< PLUGIN-SPECIFIC <<<"
 const COPIES = [
   { path: "src/host/tools-rpc.ts", optional: true, sha256: "9210d0a531788d1f0d70d44a13a032816ef240b04aa5303f6ba4b2e2a52b6c94", part: sharedPart },
   { path: "test/support/jelly-kit.ts", optional: false, sha256: "ab599abcf041044c77e7938c3d9a081e00072487a7ec20b654d86c8230951190", part: (text) => text },
-  { path: "test/support/memory-kit.mjs", optional: true, sha256: "9c0c26f8bfd6218454955804219da48100804b31e6554a05a3e71efa2ffac0b2", part: (text) => text },
-  { path: "test/support/conformance.mjs", optional: true, sha256: "816fb4411a3c4e7077c6a8f25c16d07e533b0f7ebb4ce0849a5e4dcd93ce07a5", part: (text) => text },
-  { path: "test/support/schema-check.mjs", optional: true, sha256: "4e53cd3e0c792d79bd1ad04be64ffacac5776fde5d3164964027619141260a3c", part: (text) => text },
-  { path: "test/support/memory-plugin.v2.json", optional: true, sha256: "8bc5d6df7b75c0451e9ba53c967a2d3fbc3adcd419498f02581dbd15e0b0f87b", part: (text) => text },
   { path: "src/host/events-list.ts", optional: true, sha256: "9aa00fdabe67a59712979203f10e86c13bb8ab4fb0a72baadb602b77857f1d80", part: (text) => text },
+  { path: "vendor/source-contract/SHA256SUMS", optional: true, sha256: "69c22db1a25650c98901109397a10742182cde0c7b4ab88084f93ea2a1e15bb7", part: (text) => text },
 ]
 
 function sharedPart(text, path) {
