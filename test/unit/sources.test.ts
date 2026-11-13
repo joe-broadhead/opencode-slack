@@ -80,7 +80,7 @@ describe("the source declaration", () => {
 describe("the protocol", () => {
   // A cursor whose bound is older than the retention window: the source answers `CURSOR_EXPIRED` with a `gap`.
   const agedCursor = async () => {
-    const { encodeCursor } = await import("../../src/host/events-list.js")
+    const { encodeCursor } = await import("../../vendor/source-contract/cursor.js")
     // The same owner binding the source issues: a hash of the account and the owner id, and a bound older than the window.
     const owner = createHash("sha256").update(`${SEED.team}\u0000slack:${SEED.owner.id}`).digest("hex").slice(0, 16)
     return encodeCursor("slack.messages", { o: owner, c: { [PROJECT]: "1000000000.000100" } })
@@ -160,7 +160,7 @@ describe("the protocol", () => {
     await expect(slackEvents(read2, OPTION, { cursor: scoped.cursor, scope: { channels: [PROJECT] } }, NOW_MS)).rejects.toThrow(/^CURSOR_INVALID: /)
     await expect(slackEvents(read2, OPTION, { cursor: scoped.cursor, account: "T0OTHER0001" }, NOW_MS)).rejects.toThrow(/^ACCOUNT_UNKNOWN: /)
     // A contract 1 cursor (the family's codec, bound to the source only) is accepted once for the whole source.
-    const { encodeCursor } = await import("../../src/host/events-list.js")
+    const { encodeCursor } = await import("../../vendor/source-contract/cursor.js")
     const legacy = encodeCursor("slack.messages", { o: "0123456789abcdef", c: { [PROJECT]: "1000000000.000100" } })
     await expect(slackEvents(read2, OPTION, { cursor: legacy, since: SINCE }, NOW_MS)).rejects.toThrow(/^CURSOR_EXPIRED: /)
     await expect(slackEvents(read2, OPTION, { cursor: legacy, scope: { channels: [PROJECT] } }, NOW_MS)).rejects.toThrow(/^CURSOR_INVALID: /)

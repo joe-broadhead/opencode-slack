@@ -4,8 +4,9 @@
 // name, id and message below is invented.
 import { describe, expect, test } from "bun:test"
 import { PLUGIN_NAME } from "../../src/events.js"
-import { channelPage, eventsMethod, eventsTool, EVENTS_ACTION, MAX_CHANNELS, messageEvent, micros, profileOf, textMessages, tsOf, type EventsToolOptions } from "../../src/events.js"
-import { EVENT_LIMITS, encodeCursor, type EventsListInput, type EventsListResult } from "../../src/host/events-list.js"
+import { channelPage, eventsMethod, eventsTool, EVENTS_ACTION, MAX_CHANNELS, messageEvent, micros, profileOf, textMessages, tsOf, type EventsListResult, type EventsToolOptions } from "../../src/events.js"
+import { EVENT_LIMITS, type EventsListInput } from "../../vendor/source-contract/events.js"
+import { encodeCursor } from "../../vendor/source-contract/cursor.js"
 import { pageProblems } from "../../vendor/source-contract/conformance.js"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"

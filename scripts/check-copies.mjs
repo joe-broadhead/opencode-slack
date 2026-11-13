@@ -3,7 +3,8 @@
 //   node scripts/check-copies.mjs --print  print each copy's hash, after a change made in every plugin at once
 // Each plugin keeps its own copy, because each bundle and each test suite stands alone. The hashes below name the one
 // version all plugins carry: the tools RPC outside its PLUGIN-SPECIFIC block, the declaration test kit whole (Memory's
-// published `plugin-kit/` files, vendored), and the events_list source contract whole (only source plugins carry it).
+// published `plugin-kit/` files, vendored), and the vendored source contract's SHA256SUMS. The events_list contract is
+// no longer a copy: it is the vendored package's `events` and `cursor` modules.
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 
@@ -13,7 +14,6 @@ const END = "// <<< PLUGIN-SPECIFIC <<<"
 const COPIES = [
   { path: "src/host/tools-rpc.ts", optional: true, sha256: "9210d0a531788d1f0d70d44a13a032816ef240b04aa5303f6ba4b2e2a52b6c94", part: sharedPart },
   { path: "test/support/jelly-kit.ts", optional: false, sha256: "ab599abcf041044c77e7938c3d9a081e00072487a7ec20b654d86c8230951190", part: (text) => text },
-  { path: "src/host/events-list.ts", optional: true, sha256: "9aa00fdabe67a59712979203f10e86c13bb8ab4fb0a72baadb602b77857f1d80", part: (text) => text },
   { path: "vendor/source-contract/SHA256SUMS", optional: true, sha256: "e3f089f190b80628670f8dc776925e6931826216b0fe0c01d98ae37b7bed27a6", part: (text) => text },
 ]
 

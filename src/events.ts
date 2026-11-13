@@ -1,30 +1,26 @@
 import type { Plugin } from "@opencode/plugin"
 import { SERVER } from "./defaults.js"
+import { upstreamText, type JsonSchema, type OwnedMethod } from "./host/tools-rpc.js"
+// The package's events_list contract: the model, `makeEvent`, `fitPage`, the screening and the checks, and its cursors.
 import {
   EVENT_LIMITS,
   EVENTS_LIST,
   PAGE,
-  copyScope,
-  type EventsListRequest,
-  type EventsListResult,
+  SOURCE_PATTERN,
   type EventsOwner,
-  type EventsScope,
   type SourceEvent,
   cut,
-  eventsListResult,
   fitPage,
   makeEvent,
-  parseEventsListInput,
+  screenEvents,
+  sinceTime,
   startTime,
-} from "./host/events-list.js"
-import { upstreamText, type JsonSchema, type OwnedMethod } from "./host/tools-rpc.js"
-// The package's own screening (a secret in the text, instruction-shaped text from someone else) and its bound cursor.
-import { screenEvents } from "../vendor/source-contract/events.js"
-import { decodeBoundCursor, encodeBoundCursor, type CursorBinding } from "../vendor/source-contract/cursor.js"
+} from "../vendor/source-contract/events.js"
+import { type CursorBinding, decodeBoundCursor, encodeBoundCursor } from "../vendor/source-contract/cursor.js"
 import type { Status } from "./status.js"
 
 /**
- * `slack_events_list`: Slack's side of Memory's sources funnel (the shared contract in `host/events-list.ts`). It lists
+ * `slack_events_list`: Slack's side of Memory's sources funnel (the package's `events_list` contract, vendored). It lists
  * the messages posted since a cursor in the channels and direct messages the person enabled (the `events.channels`
  * option), as normalised events, oldest first. It reads only with `slack_read_user_profile` (the signed-in user, the
  * owner) and `slack_read_channel` (`oldest`, one channel at a time): never the private search, never a file, nothing
@@ -99,7 +95,185 @@ export const micros = (ts: string): bigint => {
 /** Microseconds as a Slack ts. */
 export const tsOf = (value: bigint): string => `${value / 1_000_000n}.${String(value % 1_000_000n).padStart(6, "0")}`
 
-// ── Input ───────────────────────────────────────────────────────────────
+// ── The contract-2 page ─────────────────────────────────────────────────
+
+/**
+ * What this call reads, as ids under the source's declared scope key (`channels`). The scope narrows the plugin's own
+ * `events.channels` cap and every page echoes it as the call named it, so Memory can pin it. `{}` is the whole source.
+ *
+ * The package's `events` module carries contract 1's page, which has no `setup` line, echoes a canonicalised scope and
+ * refuses `limit: 0`; this plugin's contract version 2 keeps that delta here, and every other part of the contract —
+ * the model, `makeEvent`, `fitPage`, the screening and the checks — comes from the package.
+ */
+export type EventsScope = Readonly<Record<string, readonly string[]>>
+
+/** `limit`'s default and inclusive range. `limit: 0` is the owner-only call: the owner and the scope, and no event. */
+export const LIMIT = { default: PAGE.default, min: 0, max: PAGE.max } as const
+
+/** The most scope keys one call carries, the most ids under one key, and an id's longest form. */
+export const SCOPE = { keys: 8, ids: 64, id: 128 } as const
+
+/** A scope key: a lowercase word such as `channels`. */
+export const SCOPE_KEY_PATTERN = /^[a-z][a-z0-9_]{0,31}$/
+
+/** An input after `parseEventsRequest`: `since` in epoch milliseconds, `limit` with its default, the scope as given. */
+export interface EventsListRequest {
+  readonly since?: number
+  readonly cursor?: string
+  readonly limit: number
+  readonly account?: string
+  readonly source?: string
+  readonly scope?: EventsScope
+}
+
+/** A `gap`: the source restarted its window, so Memory may have missed events. Slack never emits one. */
+export interface EventsGap {
+  readonly reason: string
+  readonly since: string
+  readonly until?: string
+}
+
+/** A final drop: text this source refuses to carry, such as a secret. */
+export interface RefusedEvent {
+  readonly external_id: string
+  readonly reason: string
+  readonly detail?: string
+}
+
+/** A retryable drop: one entry holds the consumer's cursor back. */
+export interface FailedEvent {
+  readonly external_id: string
+  readonly code: string
+  readonly reason: string
+}
+
+/** The page this plugin answers: its source, account, owner, scope and setup line, its events and its two drop lists. */
+export interface EventsListResult {
+  /** The source every event names, also on an empty page. */
+  readonly source: string
+  /** The account every event names, also on an empty page. */
+  readonly account: string
+  readonly owner: EventsOwner
+  /** The scope this call read, echoed so Memory can pin it. `{}` is the whole source. */
+  readonly scope: EventsScope
+  /** One line on what the person sets up first, empty when there is nothing to choose. */
+  readonly setup: string
+  readonly events: SourceEvent[]
+  readonly cursor: string
+  readonly more: boolean
+  readonly trust: "untrusted"
+  /** The drops, which the page always carries: a full listing's is empty. */
+  readonly refused: RefusedEvent[]
+  readonly failed: FailedEvent[]
+  /** The plugin's package name, which every page names. */
+  readonly plugin: string
+  /** Present only when the source restarted its window; absent on an ordinary page. */
+  readonly gap?: EventsGap
+}
+
+const INPUT_KEYS: readonly string[] = ["since", "cursor", "limit", "account", "source", "scope"]
+/** True when the text has a control character (U+0000 to U+001F, or U+007F). */
+const hasControl = (text: string) => [...text].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f)
+const plainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+
+/**
+ * A scope's problems, one sentence each, naming keys and never ids. `where` names the scope in the sentence, such as
+ * `"scope"`. A scope is at most `SCOPE.keys` keys, each a lowercase word, and under each `SCOPE.ids` distinct ids of
+ * at most `SCOPE.id` characters.
+ */
+export function scopeProblems(scope: unknown, where: string): string[] {
+  if (!plainObject(scope)) return [`${where} must be an object of ids under the source's scope key`]
+  const problems: string[] = []
+  const keys = Object.keys(scope)
+  if (keys.length > SCOPE.keys) problems.push(`${where} has ${keys.length} keys, over ${SCOPE.keys}`)
+  for (const key of keys) {
+    if (!SCOPE_KEY_PATTERN.test(key)) problems.push(`${where} has the key "${cut(key, 32)}", which is not a lowercase word`)
+    const ids = scope[key]
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > SCOPE.ids) {
+      problems.push(`${where}.${cut(key, 32)} must be a list of 1 to ${SCOPE.ids} ids`)
+      continue
+    }
+    if (ids.some((id) => typeof id !== "string" || id.length === 0 || id.length > SCOPE.id || hasControl(id))) {
+      problems.push(`${where}.${cut(key, 32)} has an id that is not a non-empty line of at most ${SCOPE.id} characters`)
+      continue
+    }
+    if (new Set(ids).size !== ids.length) problems.push(`${where}.${cut(key, 32)} repeats an id`)
+  }
+  return problems
+}
+
+/** A validated scope, as it is echoed: its keys in the order given, each with its ids. */
+export function copyScope(scope: EventsScope): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(scope).map(([key, ids]) => [key, [...ids]]))
+}
+
+/** The input checked and normalised, or the problems with it, one sentence each, naming fields and never values. */
+export function parseEventsRequest(input: unknown): { ok: true; value: EventsListRequest } | { ok: false; problems: string[] } {
+  const value = input === undefined || input === null ? {} : input
+  if (!plainObject(value)) return { ok: false, problems: ["the input must be an object"] }
+  const problems = Object.keys(value).filter((key) => !INPUT_KEYS.includes(key)).map((key) => `"${key}" is not an input of events_list`)
+  const { since, cursor, limit, account, source, scope } = value
+  let time: number | undefined
+  if (since !== undefined) {
+    time = typeof since === "string" ? sinceTime(since) : undefined
+    if (time === undefined) problems.push(`"since" must be an ISO date, or an ISO date-time with Z or an offset`)
+  }
+  if (cursor !== undefined && (typeof cursor !== "string" || cursor.length === 0 || cursor.length > EVENT_LIMITS.cursor)) {
+    problems.push(`"cursor" must be a cursor from a previous result`)
+  }
+  if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit < LIMIT.min || limit > LIMIT.max)) {
+    problems.push(`"limit" must be an integer from ${LIMIT.min} to ${LIMIT.max}`)
+  }
+  if (account !== undefined && (typeof account !== "string" || account.length === 0 || account.length > EVENT_LIMITS.account || hasControl(account))) {
+    problems.push(`"account" must be a non-empty account name of at most ${EVENT_LIMITS.account} characters`)
+  }
+  if (source !== undefined && (typeof source !== "string" || source.length > EVENT_LIMITS.source || !SOURCE_PATTERN.test(source))) {
+    problems.push(`"source" must be a source's name, a lowercase word such as slack`)
+  }
+  if (scope !== undefined) problems.push(...scopeProblems(scope, `"scope"`))
+  if (problems.length > 0) return { ok: false, problems }
+  return {
+    ok: true,
+    value: {
+      ...(time === undefined ? {} : { since: time }),
+      ...(cursor === undefined ? {} : { cursor: cursor as string }),
+      limit: (limit as number | undefined) ?? LIMIT.default,
+      ...(account === undefined ? {} : { account: account as string }),
+      ...(source === undefined ? {} : { source: source as string }),
+      ...(scope === undefined ? {} : { scope: copyScope(scope as EventsScope) }),
+    },
+  }
+}
+
+/** Whose a page is: the source and account it lists, the signed-in owner, its scope and its setup line. */
+export interface EventsListIdentity {
+  readonly source: string
+  readonly account: string
+  readonly owner: EventsOwner
+  readonly scope: EventsScope
+  readonly setup: string
+}
+
+/** A page before this plugin's extras: its source, account, owner, scope, setup, trust marker and, when it restarted, its gap. */
+export type EventsPage = Omit<EventsListResult, "refused" | "failed" | "plugin">
+
+/** A page, with its source, account, owner, scope, setup, trust marker and, only when it restarted, its gap. */
+export function eventsListResult(identity: EventsListIdentity, events: readonly SourceEvent[], cursor: string, more: boolean, gap?: EventsGap): EventsPage {
+  return {
+    source: identity.source,
+    account: identity.account,
+    owner: identity.owner,
+    scope: copyScope(identity.scope),
+    setup: identity.setup,
+    events: [...events],
+    cursor,
+    more,
+    trust: "untrusted",
+    ...(gap === undefined ? {} : { gap: { ...gap } }),
+  }
+}
+
+// ── The tool's input ────────────────────────────────────────────────────
 
 export const EVENTS_INPUT: JsonSchema = {
   type: "object",
@@ -107,7 +281,7 @@ export const EVENTS_INPUT: JsonSchema = {
   properties: {
     since: { type: "string", description: "Where to start without a cursor: an ISO date (a UTC day) or an ISO date-time with Z or an offset. Default: 24 hours ago" },
     cursor: { type: "string", minLength: 1, maxLength: EVENT_LIMITS.cursor, description: "The previous result's cursor, to list what was posted after it. It wins over since" },
-    limit: { type: "integer", minimum: PAGE.min, maximum: PAGE.max, description: `Most events to return, ${PAGE.min} to ${PAGE.max}; ${PAGE.default} by default. 0 is the owner-only call: the workspace and the signed-in user, no events` },
+    limit: { type: "integer", minimum: LIMIT.min, maximum: LIMIT.max, description: `Most events to return, ${LIMIT.min} to ${LIMIT.max}; ${LIMIT.default} by default. 0 is the owner-only call: the workspace and the signed-in user, no events` },
     account: { type: "string", minLength: 1, maxLength: EVENT_LIMITS.account, description: "The workspace, as a previous result names it. Default: the signed-in workspace" },
     source: { type: "string", description: `"${SLACK_SOURCE}", the only source this plugin has` },
     scope: {
@@ -177,7 +351,7 @@ function eventsRequest(input: unknown): EventsListRequest {
   // The descriptor's source id is `slack.messages`; the shared parser takes a bare word, so it reads the source's own
   // name and the id is accepted here as its alias.
   const normalised = isRecord(input) && input["source"] === SLACK_SOURCE ? { ...input, source: "slack" } : input
-  const parsed = parseEventsListInput(normalised)
+  const parsed = parseEventsRequest(normalised)
   if (!parsed.ok) throw eventsError("INPUT_INVALID", `The events_list input is invalid: ${parsed.problems.join("; ")}.`, "Pass since, cursor, limit, account, scope or source as events_list's schema describes them.")
   if (parsed.value.source !== undefined && parsed.value.source !== "slack") {
     throw eventsError("SOURCE_UNKNOWN", `This plugin lists only the source "${SLACK_SOURCE}".`, `Leave "source" out, or pass "${SLACK_SOURCE}".`)
@@ -549,16 +723,15 @@ export async function slackEvents(read: Read, optionChannels: readonly string[],
   // own `events.channels` cap), and a call that names channels echoes those, never more.
   const identity = { source: SLACK_SOURCE, account, owner: profile.owner, scope: copyScope(request.scope ?? {}), setup: setupLine(channels, optionChannels) }
   const binding = bindingOf(account, request.scope)
-  const page = (result: EventsListResult, extra: { refused?: RefusedEvent[]; failed?: FailedEvent[]; gap?: EventsListResult["gap"] } = {}) => ({
+  const page = (result: EventsPage, extra: { refused?: RefusedEvent[]; failed?: FailedEvent[] }): EventsListResult => ({
     plugin: PLUGIN_NAME,
     ...result,
     refused: extra.refused ?? [],
     failed: extra.failed ?? [],
-    ...(extra.gap === undefined ? {} : { gap: extra.gap }),
   })
   if (request.limit === 0) {
     // The owner-only call reads no channel. Its cursor is the empty listing's, so a later call with it starts at since.
-    return page(eventsListResult(identity, [], encodeBoundCursor(binding, { c: {} }), false))
+    return page(eventsListResult(identity, [], encodeBoundCursor(binding, { c: {} }), false), {})
   }
   const known = request.cursor === undefined ? new Map<string, bigint>() : boundsOf(request.cursor, binding)
   // History older than the retention window is gone: the consumer gets `gap`, not a silent shortpage (contract 1's rule).
@@ -668,13 +841,6 @@ export interface RefusedEvent {
   readonly external_id: string
   readonly reason: string
   readonly detail?: string
-}
-
-/** A retryable drop: one entry holds the consumer's cursor back. */
-export interface FailedEvent {
-  readonly external_id: string
-  readonly code: string
-  readonly reason: string
 }
 
 /**
