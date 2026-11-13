@@ -333,5 +333,40 @@
         }
       ]
     }
+  },
+  "sources": {
+    "contractVersion": 1,
+    "items": [
+      {
+        "id": "slack.messages",
+        "kind": "events",
+        "reads": "message",
+        "tool": "events_list",
+        "accounts": { "named": false },
+        "scope": {
+          "keys": [ "channels" ],
+          "describe": "Channels and direct messages to read.",
+          "suggest": {
+            "tool": "slack_list_user_channels",
+            "operations": [ "slack_list_user_channels" ]
+          }
+        },
+        "details": [
+          {
+            "id": "slack.messages.thread",
+            "tool": "slack_read_detail",
+            "from": [ "thread" ]
+          }
+        ],
+        "permission": {
+          "events": "slack_events_list",
+          "operations": [ "slack_read_user_profile", "slack_read_channel", "slack_read_thread" ]
+        },
+        "private": true,
+        "cost": { "class": "free" },
+        "maxBytes": 262144,
+        "urlHosts": [ "*.slack.com" ]
+      }
+    ]
   }
 }

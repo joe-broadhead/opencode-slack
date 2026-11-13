@@ -1,6 +1,6 @@
 import type { PluginCode } from "./codes.js"
 import { APP_NAME, SERVER_DISPLAY_NAME, type ClientState } from "./connect.js"
-import { EVENTS_LIST } from "./host/events-list.js"
+import { EVENTS_LIST } from "../vendor/source-contract/events.js"
 import type { Identity } from "./identity.js"
 import { APP_MANIFEST_URL, SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
 import type { ParsedOptions } from "./options.js"

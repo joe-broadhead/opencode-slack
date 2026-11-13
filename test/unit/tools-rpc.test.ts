@@ -3,23 +3,17 @@
 import { describe, expect, test } from "bun:test"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { METHODS, NEXT_STEPS, PLUGIN_ID, pluginError, shapeInput, shapeResult, SLACK, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import {
   CLASSES,
   hidden,
-  METHODS,
-  NEXT_STEPS,
-  PLUGIN_ID,
-  pluginError,
   registerToolsRpc,
-  shapeInput,
-  shapeResult,
-  TOOLS_RPC_ID,
   upstreamText,
   type MethodSpec,
   type PluginMethod,
   type ToolCall,
   type ToolsRpcOptions,
-} from "../../src/host/tools-rpc.js"
+} from "../../vendor/source-contract/tools-rpc.js"
 import { KNOWN_TOOLS, SEND_TOOLS } from "../../src/tools.js"
 
 type Effect = "allow" | "deny" | "ask"
@@ -203,6 +197,7 @@ async function setup(options: Setup = {}): Promise<Harness> {
   // Read by destructuring, the idiom the module uses: no dotted access from the options object for a forbidden scan to match.
   const { shapers, mcp: withMcp = true, server = SERVER, managed = true, unavailableDetail, notRegistered } = options
   const stop = await registerToolsRpc(ctx as never, {
+    plugin: SLACK,
     methods,
     ...(shapers === undefined ? {} : { shapers }),
     ...(withMcp === false
@@ -683,7 +678,7 @@ describe("registration", () => {
     }))
 })
 
-describe("the shared copy's own block", () => {
+describe("Slack's block", () => {
   test("is Slack's: every known tool a method, reads and sends classified, and the shapers are the identity", () => {
     expect(METHODS).toHaveLength(Object.keys(KNOWN_TOOLS).length)
     const counts = { read: 0, write: 0, send: 0 }

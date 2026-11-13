@@ -36,7 +36,7 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
 | `oauth.auth_server_metadata_url` | Not set: OpenCode discovers Slack's authorization server | An `https:` URL of at most 2048 characters, with no user name, password or fragment. Passed to OpenCode unchanged; OpenCode uses this OAuth metadata document in place of Slack's for the whole sign-in: its `authorization_endpoint`, its `token_endpoint` (which receives the code, every refresh token and any client secret) and its `issuer`. Point it only at your host's own sign-in service, serving a copy of Slack's metadata with only `token_endpoint` changed. See [Refresh behind a hosted callback](#refresh-behind-a-hosted-callback). |
 | `allowUntestedHost` | `false` | `true` or `false`. If it is `true`, the plugin runs on an OpenCode version outside its supported range, and status keeps warning. See [Host check](#host-check). |
 | `access` | `"all"` | `"all"`, `"ask-changes"` or `"read-only"`. It generates the default rules: every tool allowed, the reads allowed and the rest asking, or the reads allowed and the rest denied. See [The access option](#the-access-option). |
-| `events.channels` | `[]`: none | At most 16 unique Slack ids: channels (`C…`), private channels and group messages (`G…`), direct messages (`D…`), or users whose direct messages to read (`U…`, `W…`). Only these conversations are listed by `slack_events_list` for Memory's collector. See [Events list](#events-list). |
+| `events.channels` | `[]`: no cap | At most 16 unique Slack ids: channels (`C…`), private channels and group messages (`G…`), direct messages (`D…`), or users whose direct messages to read (`U…`, `W…`). A **cap** on what `slack_events_list` may read: a call's `scope` is intersected with it, and with none set the scope alone decides. See [Events list](#events-list). |
 
 Unknown keys are rejected, at the top level and inside `oauth`.
 
@@ -443,9 +443,22 @@ The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Cl
 `slack_events_list` (Code Mode `tools.slack.events_list`, and the tools RPC method `events_list`) is this plugin's side of the `events_list` source contract that Memory's collector reads. It is not for answering questions: the model searches and reads threads for that.
 
 ```text
-events_list({ since?, cursor?, limit?, account?, source? })
-  → { source: "slack", account, owner: { id, label }, events, cursor, more, trust: "untrusted" }
+events_list({ since?, cursor?, limit?, account?, source?, scope? })
+  → { source: "slack", account, owner: { id, label }, events, cursor, more, trust: "untrusted", scope, setup }
 ```
+
+- **Contract 2**, the version Memory's jobs read:
+  - **`limit: 0` is the owner-only call.** It answers `source`, `account`, `owner` and `setup`, with `events: []` and
+    `more: false`, reads nothing but the profile, and carries a cursor that starts a later listing at `since`. Memory
+    calls it on every run to check the account.
+  - **`scope`** is `{ channels: [ids] }`: the narrowing Memory confirmed. It is intersected with `events.channels`,
+    never widening it, and every result echoes the scope the call named (`{}` when it named none: the whole source,
+    which reads the option). An unknown key is `SCOPE_UNKNOWN`; a value that is not a Slack id, or a list that is
+    empty, repeated or over 64, is `INPUT_INVALID`, and so is a repeated id under one key.
+  - **`setup`** is one line on what to change before the source can read anything, empty when nothing is needed. The
+    manifest's static counterpart, shown while the source is not yet bound, is `setupHint`.
+  - **`gap`** is present only when a source restarted its window: `{ reason, since, until? }` with
+    `sync-token-expired`, `cursor-invalid` or `window-truncated`. Slack never restarts silently, so it answers none.
 
 - **What it lists**, oldest first: the messages posted in the conversations listed in `events.channels`, read one at a time with `slack_read_channel` and `oldest`. It never uses the private search, never reads a file, and calls nothing that asks under the default rules. A thread's replies are listed only when Slack shows them in the channel (sent to the channel too); a channel read does not include the rest. With no channel enabled, it lists nothing and says so.
 - **Scopes**: the default scopes read public channels only. To list private channels, group messages or direct messages, add `groups:history`, `mpim:history` or `im:history` to `oauth.scopes` and sign in again. Listing a direct message is reading it without a prompt: enabling it in `events.channels` is the consent.
@@ -453,7 +466,7 @@ events_list({ since?, cursor?, limit?, account?, source? })
 - **Account and owner**: `owner` is the signed-in user, from `slack_read_user_profile`, as `slack:<user id>` with their name. `account` is the workspace's team id when Slack names it, else its address's first label, else `default`. Memory compares the owner with the person it collects for. `account` and `source` are optional inputs: another workspace is `ACCOUNT_UNKNOWN`, another source `SOURCE_UNKNOWN`.
 - **Reading Slack's answer**: Slack's tools answer in Markdown text. The plugin reads structured JSON when Slack gives it, and otherwise the labelled lines Slack writes for each message (`From`, `Message TS` or `Message_ts`, `Thread TS`, `Reply count`, `Permalink`, `Text`), and the next page's cursor. An answer with message timestamps it cannot read is `UPSTREAM_UNREADABLE`, never an empty page.
 - **Cursor**: opaque, at most 1,024 characters. It holds each conversation's last listed ts and a digest of the workspace and user, so another workspace's or sign-in's cursor is `CURSOR_INVALID`. A cursor wins over `since`; without either, or for a conversation added to `events.channels` later, the listing starts 24 hours ago. An older cursor lists the same events again.
-- **Limits**: `limit` is 1 to 500 (100 by default); a result stops early, with `more: true`, rather than pass 900 KB. A conversation with more than 5 pages of 100 new messages is read in halves of its time window, oldest first, with `more: true`; one that does not fit in 30 reads is `TOO_MANY_MESSAGES`, never a skip.
+- **Limits**: `limit` is 0 to 500 (100 by default; 0 is the owner-only call); a result stops early, with `more: true`, rather than pass 900 KB. A conversation with more than 5 pages of 100 new messages is read in halves of its time window, oldest first, with `more: true`; one that does not fit in 30 reads is `TOO_MANY_MESSAGES`, never a skip.
 - **Permissions**: it asserts `slack_events_list`, then each read goes through OpenCode's own executor with its own rules. Every result carries `trust: "untrusted"`: other people wrote the messages.
 
 ## Mark as read
@@ -490,16 +503,26 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | none: agents without default rules | connected | Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools. |
 | `STATUS_UNAVAILABLE` | none: status itself failed | Run /slack-status again in a moment (in the dialog: press r to retry). |
 | `SKILLS_INVALID` | none: the plugin does not load | Reinstall the plugin: opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.1, then opencode plugin add github:joe-broadhead/opencode-slack#v0.0.1, then opencode reload. A bundled skill is missing or has invalid frontmatter. |
-| `INPUT_INVALID` | none: `slack_events_list` | Pass since, cursor, limit, account or source as events_list's schema describes them. |
+| `INPUT_INVALID` | none: `slack_events_list` | Pass since, cursor, limit, account, scope or source as events_list's schema describes them. |
+| `SCOPE_UNKNOWN` | none: `slack_events_list` | Pass scope.channels, or leave scope out. |
+| `SCOPE_INVALID` | none: `slack_events_list` | Pass channel and direct message ids, such as C0123ABCD45. |
 | `SOURCE_UNKNOWN` | none: `slack_events_list` | Leave "source" out, or pass "slack". |
 | `CURSOR_INVALID` | none: `slack_events_list` | Call events_list without a cursor, with since, to start again. |
+| `CURSOR_EXPIRED` | none: `slack_events_list` | Call events_list without a cursor, with since, to start a fresh window. |
+| `SCHEMA_VIOLATION` | none: the detail read | Call it with the event's thread field. |
+| `UNAVAILABLE` | none: `slack_events_list`, a message could not be read | Retry the same window |
 | `ACCOUNT_UNKNOWN` | none: `slack_events_list` | Leave "account" out, or pass the signed-in workspace. |
 | `TOO_MANY_MESSAGES` | none: `slack_events_list` | Call events_list again with a later since, without a cursor. |
 | `UPSTREAM_UNREADABLE` | none: `slack_events_list` | Call the tool directly to see Slack's answer, and run /slack-status. |
-| `INPUT_INVALID` | none: `slack_events_list` | Pass since, cursor, limit, account or source as events_list's schema describes them. |
+| `INPUT_INVALID` | none: `slack_events_list` | Pass since, cursor, limit, account, scope or source as events_list's schema describes them. |
+| `SCOPE_UNKNOWN` | none: `slack_events_list` | Pass scope.channels, or leave scope out. |
+| `SCOPE_INVALID` | none: `slack_events_list` | Pass channel and direct message ids, such as C0123ABCD45. |
 | `SOURCE_UNKNOWN` | none: `slack_events_list` | Leave "source" out, or pass "slack". |
 | `ACCOUNT_UNKNOWN` | none: `slack_events_list` | Leave "account" out, or pass the workspace the message names. |
 | `CURSOR_INVALID` | none: `slack_events_list` | Call events_list without a cursor, with since, to start again. |
+| `CURSOR_EXPIRED` | none: `slack_events_list` | Call events_list without a cursor, with since, to start a fresh window. |
+| `SCHEMA_VIOLATION` | none: the detail read | Call it with the event's thread field. |
+| `UNAVAILABLE` | none: `slack_events_list`, a message could not be read | Retry the same window |
 | `TOO_MANY_MESSAGES` | none: `slack_events_list` | Call events_list again with a later since, without a cursor. |
 | `UPSTREAM_ERROR` | none: `slack_events_list`, Slack refused a read (the message names the channel) | Check that the channel id in events.channels is one you can read, then call events_list again with the same cursor. |
 | `UPSTREAM_UNREADABLE` | none: `slack_events_list`, Slack answered in a shape it does not read | Call the tool the message names directly to see Slack's answer, and run /slack-status. |

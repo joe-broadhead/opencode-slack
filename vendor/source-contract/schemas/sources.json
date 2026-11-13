@@ -1,0 +1,720 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "contractVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "items": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+              },
+              "tool": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "input": {
+                "description": "The input the tool needs to reach this source. It carries no account and no secret.",
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              "accounts": {
+                "type": "object",
+                "properties": {
+                  "named": {
+                    "type": "boolean",
+                    "description": "True when the source reads more than one account, so a read names one."
+                  }
+                },
+                "required": [
+                  "named"
+                ],
+                "additionalProperties": false,
+                "description": "Which signed-in accounts a source reads."
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 32,
+                      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                    },
+                    "description": "The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."
+                  },
+                  "describe": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "The sentence shown at consent, such as Which labels."
+                  },
+                  "suggest": {
+                    "description": "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant.",
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                      },
+                      "operations": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "tool",
+                      "operations"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "keys",
+                  "describe"
+                ],
+                "additionalProperties": false,
+                "description": "What a person confirms at consent, and the sentence that asks them."
+              },
+              "private": {
+                "description": "True when everything this source reads is personal: shown at consent.",
+                "type": "boolean"
+              },
+              "cost": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "free"
+                      },
+                      "units": {
+                        "not": {}
+                      },
+                      "probe": {
+                        "not": {}
+                      }
+                    },
+                    "required": [
+                      "class"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "metered"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "billed"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units",
+                      "probe"
+                    ],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "What one read costs, including a probe call, which reads no content."
+              },
+              "cadence": {
+                "type": "object",
+                "properties": {
+                  "providerMinMinutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10080
+                  }
+                },
+                "additionalProperties": false,
+                "description": "A provider's own floor between reads. Only where the provider imposes one."
+              },
+              "maxBytes": {
+                "default": 65536,
+                "description": "The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB).",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1048576
+              },
+              "retentionDays": {
+                "description": "How many days an events consumer keeps what it read.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "urlHosts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+                },
+                "description": "The hosts an event's url may point at, for display. A consumer renders a url only when its host matches."
+              },
+              "kind": {
+                "type": "string",
+                "const": "events"
+              },
+              "reads": {
+                "type": "string",
+                "maxLength": 32,
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "description": "The thing it reads."
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+                    },
+                    "tool": {
+                      "type": "string",
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    },
+                    "from": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "external_id",
+                          "kind",
+                          "occurred_at",
+                          "url",
+                          "thread",
+                          "actors",
+                          "labels",
+                          "hash"
+                        ]
+                      },
+                      "description": "The event fields the detail's input comes from. Identifiers only: an event's title and text are never an input."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "tool",
+                    "from"
+                  ],
+                  "additionalProperties": false,
+                  "description": "One read of an event's detail: the tool, and the event fields its input comes from."
+                }
+              },
+              "permission": {
+                "type": "object",
+                "properties": {
+                  "events": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                  },
+                  "tool": {
+                    "not": {}
+                  },
+                  "operations": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                    },
+                    "description": "Every operation the source's reads assert, and nothing else."
+                  }
+                },
+                "required": [
+                  "events",
+                  "operations"
+                ],
+                "additionalProperties": false,
+                "description": "The events_list action, and the provider operations the source asserts."
+              },
+              "output": {
+                "not": {}
+              },
+              "maxAgeSec": {
+                "not": {}
+              },
+              "params": {
+                "not": {}
+              }
+            },
+            "required": [
+              "id",
+              "tool",
+              "cost",
+              "kind",
+              "reads",
+              "permission"
+            ],
+            "additionalProperties": false,
+            "description": "An events source: append-only, ordered, read with a cursor."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+              },
+              "tool": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "input": {
+                "description": "The input the tool needs to reach this source. It carries no account and no secret.",
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              "accounts": {
+                "type": "object",
+                "properties": {
+                  "named": {
+                    "type": "boolean",
+                    "description": "True when the source reads more than one account, so a read names one."
+                  }
+                },
+                "required": [
+                  "named"
+                ],
+                "additionalProperties": false,
+                "description": "Which signed-in accounts a source reads."
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 32,
+                      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                    },
+                    "description": "The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."
+                  },
+                  "describe": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "The sentence shown at consent, such as Which labels."
+                  },
+                  "suggest": {
+                    "description": "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant.",
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                      },
+                      "operations": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "tool",
+                      "operations"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "keys",
+                  "describe"
+                ],
+                "additionalProperties": false,
+                "description": "What a person confirms at consent, and the sentence that asks them."
+              },
+              "private": {
+                "description": "True when everything this source reads is personal: shown at consent.",
+                "type": "boolean"
+              },
+              "cost": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "free"
+                      },
+                      "units": {
+                        "not": {}
+                      },
+                      "probe": {
+                        "not": {}
+                      }
+                    },
+                    "required": [
+                      "class"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "metered"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "billed"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units",
+                      "probe"
+                    ],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "What one read costs, including a probe call, which reads no content."
+              },
+              "cadence": {
+                "type": "object",
+                "properties": {
+                  "providerMinMinutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10080
+                  }
+                },
+                "additionalProperties": false,
+                "description": "A provider's own floor between reads. Only where the provider imposes one."
+              },
+              "maxBytes": {
+                "default": 65536,
+                "description": "The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB).",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1048576
+              },
+              "retentionDays": {
+                "description": "How many days an events consumer keeps what it read.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "urlHosts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+                },
+                "description": "The hosts an event's url may point at, for display. A consumer renders a url only when its host matches."
+              },
+              "kind": {
+                "type": "string",
+                "const": "snapshot"
+              },
+              "output": {
+                "type": "string",
+                "maxLength": 32,
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "description": "The name of its schema in the output registry. The registry itself is the app's."
+              },
+              "params": {
+                "description": "The parameters a consumer may pass, resolved by the library at read time.",
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              "permission": {
+                "type": "object",
+                "properties": {
+                  "tool": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                  },
+                  "events": {
+                    "not": {}
+                  },
+                  "operations": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                    },
+                    "description": "Every operation the source's reads assert, and nothing else."
+                  }
+                },
+                "required": [
+                  "tool",
+                  "operations"
+                ],
+                "additionalProperties": false,
+                "description": "The read tool's action, and the provider operations the source asserts."
+              },
+              "maxAgeSec": {
+                "description": "How long a result may be reused before it is read again.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "reads": {
+                "not": {}
+              },
+              "details": {
+                "not": {}
+              }
+            },
+            "required": [
+              "id",
+              "tool",
+              "cost",
+              "kind",
+              "output",
+              "permission"
+            ],
+            "additionalProperties": false,
+            "description": "A snapshot source: the latest state, read on demand."
+          }
+        ]
+      },
+      "description": "The plugin's sources. A source id is unique across the declaration."
+    }
+  },
+  "required": [
+    "contractVersion",
+    "items"
+  ],
+  "additionalProperties": false
+}

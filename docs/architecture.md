@@ -9,8 +9,10 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 | Server | `src/index.ts` (`slack.workspace`) | Reads the options, resolves the Slack app client, registers the MCP server, the default permission rules, the skill, `/slack-status`, the status RPC and the tools RPC. |
 | TUI | `src/tui.tsx` (`slack.workspace.tui`) | The palette command **Slack: Status** and `/slack`, which open one dialog that renders the status RPC. |
 | RPC contract | `src/rpc.ts` (`slack.workspace`) | The JSON Schema contract of the `status` method. Inlined into both bundles: the server registers it and the TUI calls it. `exports` lists only `.` and `./tui`. |
-| Tools RPC | `src/host/tools-rpc.ts` (`slack.workspace.tools`) | `describe`, one method per known tool, and the owned methods `events_list`, `mark_read` and `status`, so a script can call them with no model ([Scripting](scripting.md)). A copy of a module shared by several plugins, with Slack's part in one marked block. Inlined into `dist/index.js`. |
-| Events list | `src/events.ts`, `src/host/events-list.ts` | `slack_events_list`, Memory's source of Slack events: the messages of the enabled channels as the shared `events_list` contract's events. `host/events-list.ts` is the contract, a copy every source plugin carries unchanged. |
+| Tools RPC | `src/host/tools-rpc.ts` (`slack.workspace.tools`) | `describe`, one method per known tool, and the owned methods `events_list`, `probe`, `slack_read_detail`, `mark_read` and `status`, so a script can call them with no model ([Scripting](scripting.md)). The transport is the vendored package's `tools-rpc`; this file is Slack's `ToolsRpcPlugin` value. Inlined into `dist/index.js`. |
+| Events list | `src/events.ts`, `vendor/source-contract/events.js` | `slack_events_list`, Memory's source of Slack events: the messages of the enabled channels as the shared `events_list` contract's events, and its contract-2 owner-only call and `scope`. The contract is the vendored package's `events` and `cursor` modules; the contract-2 page is `src/events.ts`'s own. |
+| Memory declaration | `package.json#memory`, `docs/memory.md` | The connector Memory reads from disk: the identity read, the declared reads and their scope inputs, the `channels` cap, the source at `contract: 2` and the three job templates. |
+| Memory kit | `test/support/memory-kit.mjs`, `conformance.mjs`, `schema-check.mjs`, `memory-plugin.v2.json`, `connector-fixture.ts`, `test/fixtures/fake-slack-shaped.ts` | Memory's published kit (the schema and its checker, the static rules, and the fixture half: a recording permission context and `eventsListConformance`), vendored byte for byte and hash-pinned; this plugin's small harness for the identity answer and `suggestBy`; and an offline shaped Slack server with threads, an instruction-shaped message and a pasted block. |
 
 ## Build
 
@@ -22,7 +24,7 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 - `connect.ts`: the **Slack app client ID** `/connect` entry (a key method whose key is the client ID), client resolution (options, then `/connect`; no client ships), and the **Slack** display name of the server's own integration.
 - `server.ts`: the MCP server config, registered only when there is a client and the name is free.
 - `permissions.ts` and `tools.ts`: the tool classes, the default rule block inserted after each agent's base allow, and the reads a script may call.
-- `host/tools-rpc.ts`: the tools RPC. See [Tools RPC](#tools-rpc).
+- `host/tools-rpc.ts`: the tools RPC's transport, the vendored `vendor/source-contract/tools-rpc.js`, and Slack's part as one `ToolsRpcPlugin` value. See [Tools RPC](#tools-rpc).
 - `status.ts`: the one status model and its rows. `/slack-status`, the RPC and the dialog all render it.
 - `skills.ts`: loads `skills/slack-search/SKILL.md`.
 - `host-version.ts`: the supported range check, and the tested releases.
@@ -31,7 +33,7 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 - `mark-read.ts`: `slack_mark_read` and its tools RPC method `mark_read`: it asserts its own action, then calls `conversations.mark`; `missing_scope` is `SCOPE_MISSING`.
 - `status-method.ts`: the tools RPC's `status` method, the same status model as the status RPC.
 - `events.ts`: `slack_events_list` and its tools RPC method. It parses Slack's answers (JSON, else the labelled Markdown lines), reads each enabled channel after its cursor `ts`, halves a window too large for one call, and reads only through the host's executors.
-- `host/events-list.ts`: the shared `events_list` contract: the event type and limits, input, cursors, `makeEvent`, `fitPage`, the checks and the conformance test. `scripts/check-copies.mjs` pins its hash.
+- `vendor/source-contract/events.js` and `cursor.js`: the package's `events_list` contract, vendored: the event type and limits, `makeEvent`, `eventHash`, `fitPage`, the screening and the checks, and the version 1 and bound cursors. `src/events.ts` keeps the contract-2 page the package has no field for: `limit: 0`, the scope as the call named it, and the `setup` line.
 
 ## Runtime flow
 

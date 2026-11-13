@@ -103,7 +103,7 @@ describe("tool names and files the text names", () => {
   // `slack_*` is the catch-all rule, and `slack_<tool>` a pattern; `slack_archive` is the docs' example of another
   // server's tool that the catch-all also matches; `slack_events_list` and `slack_mark_read` are the plugin's own tools,
   // and `slack_status` the tools RPC status method's permission action.
-  const NOT_TOOLS = new Set(["slack_", "slack_archive", "slack_events_list", "slack_mark_read", "slack_status"])
+  const NOT_TOOLS = new Set(["slack_", "slack_archive", "slack_events_list", "slack_mark_read", "slack_status", "slack_read_detail", "slack_probe"])
 
   test("every slack_ tool named in the skill and the docs is one of Slack's, after one permission prefix", () => {
     const named = FILES.flatMap((file) => [...read(file).matchAll(/`(slack_[a-z_]*)/g)].map((match) => ({ file, name: match[1]! })))

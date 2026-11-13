@@ -31,7 +31,10 @@ afterAll(() => {
 }, { timeout: 120_000 })
 
 const MAX_ENTRIES = 50
-const MAX_UNPACKED_BYTES = 150 * 1024
+// A guard against a runaway bundle, not a target: the tarball holds the two bundles, the README and CHANGELOG, the
+// skill, the icons and package.json. Contract version 1's `sources` declaration and the package's `events` module,
+// bundled in for screening, took it past 168 KiB; 180 KiB keeps a visible ceiling.
+const MAX_UNPACKED_BYTES = 180 * 1024
 // The host packages OpenCode 2.2.3 provides to plugins, at the versions pinned for development.
 const HOST_PACKAGES = ["@opencode/plugin", "@opentui/core", "@opentui/solid", "solid-js"]
 const SERVER_MODULES = [/^node:/, /^@opencode\/plugin(?:\/|$)/]
@@ -209,7 +212,7 @@ describe.each(HOST_VERSIONS)("the installed package on stock opencode %s", (vers
       expect(build?.permissions.slice(at + 1, at + 1 + rules.length)).toEqual(rules)
       expect((await host.client.skill.list({ location })).data.map((skill) => skill.id)).toContain("slack-search")
       const tools = (await host.client.rpc.call({ rpcID: TOOLS_RPC_ID, method: "describe", location, input: {} })).output as { methods: { name: string }[] }
-      expect(tools.methods.map((method) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "mark_read", "status"])
+      expect(tools.methods.map((method) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "probe", "slack_read_detail", "mark_read", "status"])
       const paths = (await host.client.rpc.call({ rpcID: "slack.test.probe", method: "paths", location, input: {} })).output as Record<string, string>
       expect(Object.keys(paths).length).toBeGreaterThan(0)
       expect(Object.entries(paths).filter(([, path]) => !path.startsWith(host.root + sep))).toEqual([])
