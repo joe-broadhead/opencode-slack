@@ -74,7 +74,7 @@ describe("the memory declaration", () => {
     expect(memoryDeclarationProblems(declaration())).toEqual([])
     assertMemoryDeclaration(declaration())
     expect(sizeOf(declaration())).toBeLessThanOrEqual(SIZE_WARN_BYTES)
-    expect(sizeOf(declaration())).toBe(3_839)
+    expect(sizeOf(declaration())).toBe(4_592)
   })
 
   test("declares only read verbs in this plugin's namespace", () => {
@@ -168,7 +168,7 @@ describe("the memory declaration", () => {
 
   test("the templates name their connector and source, and their outputs cover their stages", () => {
     const templates = declaration()["templates"] as Record<string, unknown>[]
-    expect(templates.map((template) => template["id"])).toEqual(["threads-you-took-part-in", "thread-decisions"])
+    expect(templates.map((template) => template["id"])).toEqual(["threads-you-took-part-in", "thread-decisions", "threads-project-page"])
     const steps = ((templates[1]!["extract"] as Record<string, unknown>)["steps"] as Record<string, unknown>[])
     expect(steps.map((step) => step["source"])).toEqual(["slack", "slack"])
     expect(steps.map((step) => step["connector"])).toEqual(["slack.workspace", "slack.workspace"])

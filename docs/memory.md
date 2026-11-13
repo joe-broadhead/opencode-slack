@@ -48,8 +48,9 @@ Two job templates come with the connector. Memory lists them at confirm.
 | --- | --- | --- |
 | Threads you took part in | `render` (no model) | One cited line per thread the person posted in, into the journal. |
 | Decisions and commitments from your threads | `extract` (the model), off until its eval passes | Proposals for review: a decision, and a commitment opening or closing. Nothing is written directly. |
+| Threads you took part in, on a project page | `render` (no model) | A cited `section:Threads` block on a project page, over a seven-day window, with the replies a channel read never lists. |
 
-Both select `unit: "thread"`, `participant: "owner"`, a one-day window. Each step names its `connector`
+All three select `unit: "thread"`, `participant: "owner"`. Each step names its `connector`
 (`slack.workspace`) and its `source` (`slack`), and a render stage carries `into`, `heading`, `line` and `max` on the
 stage itself. The second template reads every reply of the thread with `slack_read_thread` (`"for": "thread"`), which is
 why the declaration names that read.
