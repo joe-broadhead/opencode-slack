@@ -14,6 +14,11 @@ export interface Options {
   readonly callbackPort?: number
   readonly scopes: readonly string[]
   readonly clientSecret?: string
+  /**
+   * The OAuth authorization server metadata document OpenCode reads instead of discovering Slack's, passed to the MCP
+   * server's `oauth` block unchanged. Its `token_endpoint` receives every token exchange and refresh.
+   */
+  readonly authServerMetadataUrl?: string
   readonly allowUntestedHost: boolean
   /** What the generated default rules allow: everything, changes ask, or read-only. */
   readonly access: Access
@@ -35,7 +40,9 @@ export type ParsedOptions =
 
 const TOP_KEYS = ["oauth", "allowUntestedHost", "access", "events"]
 const EVENTS_KEYS = ["channels"]
-const OAUTH_KEYS = ["client_id", "redirect_uri", "callback_port", "scopes", "client_secret"]
+const OAUTH_KEYS = ["client_id", "redirect_uri", "callback_port", "scopes", "client_secret", "auth_server_metadata_url"]
+/** Longer than any metadata address a host serves, and short enough to refuse a pasted document. */
+export const MAX_METADATA_URL_LENGTH = 2048
 const NO_SPACES = /^\S+$/
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -63,6 +70,21 @@ function redirectProblem(value: string): string | undefined {
   if (url.username !== "" || url.password !== "") return "Must not include credentials."
   if (value.includes("?") || value.includes("#")) return "Must not include a query or fragment."
   if (url.pathname === "/") return "Must include a path, such as /callback."
+  return undefined
+}
+
+/** An `https:` address with a host, and no user name, password or fragment. The query is the server's own. */
+function metadataUrlProblem(value: string): string | undefined {
+  if (value.length > MAX_METADATA_URL_LENGTH) return `Must be at most ${MAX_METADATA_URL_LENGTH} characters.`
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return "Must be a valid URL."
+  }
+  if (url.protocol !== "https:") return "Must use https:."
+  if (url.username !== "" || url.password !== "") return "Must not include credentials."
+  if (value.includes("#")) return "Must not include a fragment."
   return undefined
 }
 
@@ -121,6 +143,12 @@ export function parseOptions(input: unknown): ParsedOptions {
     return fail("oauth.client_secret", "Needs oauth.client_id.", "Set oauth.client_id to your Slack app's client ID, or remove oauth.client_secret.")
   }
 
+  const metadataUrl = oauth.auth_server_metadata_url
+  const metadataError = metadataUrl === undefined ? undefined : typeof metadataUrl === "string" ? metadataUrlProblem(metadataUrl) : "Must be a string."
+  if (metadataError !== undefined) {
+    return fail("oauth.auth_server_metadata_url", metadataError, "Set it to the https: address of your host's own sign-in service's OAuth metadata document, or remove it to use Slack's.")
+  }
+
   const allowUntestedHost = raw.allowUntestedHost ?? false
   if (typeof allowUntestedHost !== "boolean") {
     return fail("allowUntestedHost", "Must be true or false.", "Set it to true only to run on an OpenCode version outside the supported range.")
@@ -153,6 +181,7 @@ export function parseOptions(input: unknown): ParsedOptions {
       ...(callbackPort === undefined ? {} : { callbackPort }),
       scopes: [...scopes],
       ...(clientSecret === undefined ? {} : { clientSecret }),
+      ...(metadataUrl === undefined ? {} : { authServerMetadataUrl: metadataUrl as string }),
       allowUntestedHost,
       access: access as Access,
       channels: [...channels] as string[],
