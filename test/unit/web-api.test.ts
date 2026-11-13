@@ -147,6 +147,14 @@ describe("the tools RPC status method", () => {
     expect(STATUS_ACTION).toBe("slack_status")
   })
 
+  test("describe makes no Slack request, even while connected", async () => {
+    const host = await setUp()
+    const described = (await host.script("describe", "ses_build")) as { methods: { name: string; available: boolean }[] }
+    expect(described.methods.find((method) => method.name === MARK_READ)?.available).toBe(true)
+    expect(described.methods.find((method) => method.name === "events_list")?.available).toBe(true)
+    expect(sent).toEqual([])
+  })
+
   test("rejects an input other than an empty object", async () => {
     const host = await setUp()
     expect(await host.script("status", "ses_build", { verbose: true })).toMatchObject({ error: "failed", data: { code: "INPUT_INVALID" } })

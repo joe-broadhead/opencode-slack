@@ -63,12 +63,12 @@ export default Plugin.define({
     // Memory's source of Slack events: a Code Mode tool in the slack namespace, and the tools RPC method events_list.
     const events: EventsToolOptions | undefined = options === undefined
       ? undefined
-      : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, status: () => status() }
+      : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, status: () => status({ account: false }) }
     // The one Slack Web API client, the only code that reads the Slack token: auth.test for status's account, and
     // conversations.mark for mark_read. It uses only the plugin's own server's sign-in.
     const api = slackApi({ mcp: ctx.mcp, connection: ctx.integration.connection, owned: () => options !== undefined && !nameInUse })
     const identity = workspaceIdentity(api)
-    const marking: MarkReadOptions | undefined = options === undefined ? undefined : { permission: ctx.permission, api, status: () => status() }
+    const marking: MarkReadOptions | undefined = options === undefined ? undefined : { permission: ctx.permission, api, status: () => status({ account: false }) }
 
     if (options !== undefined) {
       const fromConnect = options.clientId === undefined
@@ -132,13 +132,15 @@ export default Plugin.define({
       }
     }
 
-    const status = async () => {
+    // With `account: false` status makes no Slack request: events_list and mark_read read it for its code and next step,
+    // and describe for availability, which never touches the network.
+    const status = async ({ account: withAccount = true }: { readonly account?: boolean } = {}) => {
       const servers = (await ctx.mcp.list()).data
       // The account is read only while the plugin's own server is connected; a failure leaves it out.
       const connected = options !== undefined && !nameInUse && client.client !== undefined
         && servers.find((server) => server.name === SERVER)?.status.status === "connected"
       // Status waits at most STATUS_WAIT_MS for a first auth.test; the lookup goes on for the next status.
-      const account = connected ? await identity.get(STATUS_WAIT_MS).catch(() => undefined) : undefined
+      const account = connected && withAccount ? await identity.get(STATUS_WAIT_MS).catch(() => undefined) : undefined
       return buildStatus({
         version: VERSION,
         hostVersion,
