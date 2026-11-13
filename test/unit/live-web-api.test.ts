@@ -1,7 +1,10 @@
 // The live Web API check's guard, offline: what it lets through to slack.com/api and what it records. The live run
 // itself is manual (docs/live-check.md). Every token and id below is invented.
 import { afterEach, describe, expect, test } from "bun:test"
-import { assertNoSecrets, record, refusal, tap } from "../../scripts/live-web-api.js"
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { assertNoSecrets, record, refusal, tap, writePrivate } from "../../scripts/live-web-api.js"
 
 const DM = "D0DM0000001"
 const realFetch = globalThis.fetch
@@ -59,4 +62,19 @@ describe("tap", () => {
 test("assertNoSecrets refuses a report with anything shaped like a Slack token", () => {
   expect(() => assertNoSecrets('{"x":"xoxe.xoxp-1-INVENTED"}')).toThrow("Slack token")
   expect(() => assertNoSecrets('{"ok":true}')).not.toThrow()
+})
+
+test("writePrivate leaves the file at mode 0600, also when it already existed with a wider mode", () => {
+  const dir = mkdtempSync(join(tmpdir(), "live-web-api-"))
+  try {
+    const fresh = join(dir, "report.json")
+    writePrivate(fresh, "{}\n")
+    expect(statSync(fresh).mode & 0o777).toBe(0o600)
+    const existing = join(dir, "existing.json")
+    writeFileSync(existing, "old\n", { mode: 0o644 })
+    writePrivate(existing, "{}\n")
+    expect(statSync(existing).mode & 0o777).toBe(0o600)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

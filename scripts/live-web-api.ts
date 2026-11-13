@@ -110,6 +110,15 @@ export function tap(mark: string | undefined, real: typeof fetch = globalThis.fe
   return { calls, refused, restore: () => void (globalThis.fetch = real) }
 }
 
+/**
+ * Writes `text` to `path` readable by its owner only: mode 0600, also when the file already existed with another mode
+ * (`writeFileSync`'s mode applies only to a new file).
+ */
+export function writePrivate(path: string, text: string): void {
+  writeFileSync(path, text, { mode: 0o600 })
+  chmodSync(path, 0o600)
+}
+
 /** Throws if the report holds anything shaped like a Slack token. */
 export function assertNoSecrets(text: string): void {
   if (TOKEN_LIKE.test(text)) throw new Error("live-web-api: the report holds something shaped like a Slack token; nothing was written")
@@ -189,8 +198,7 @@ export async function check(options: Options): Promise<Report> {
       const page = new URL(attempt.url)
       options.log(`sign-in page: ${page.origin}${page.pathname}`)
       if (options.urlFile) {
-        writeFileSync(options.urlFile, `${attempt.url}\n`, { mode: 0o600 })
-        chmodSync(options.urlFile, 0o600)
+        writePrivate(options.urlFile, `${attempt.url}\n`)
         options.log(`the full sign-in URL is in ${options.urlFile}; OpenCode's attempt expires in about ten minutes`)
       }
       options.open?.(attempt.url)
@@ -323,7 +331,7 @@ async function main(argv: readonly string[]) {
   const text = `${JSON.stringify(report, null, 2)}\n`
   assertNoSecrets(text)
   const out = value("--out")
-  if (out) writeFileSync(resolve(out), text, { mode: 0o600 })
+  if (out) writePrivate(resolve(out), text)
   console.log(text)
   const authTest = report.calls.find((item) => item.method === "auth.test")
   const accepted = authTest?.ok === true && (!report.markRead.asked || report.markRead.outcome === "ok")
