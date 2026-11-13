@@ -39,11 +39,13 @@ import { KNOWN_TOOLS, SEND_TOOLS } from "../tools.js"
 export const PLUGIN_ID = "slack.workspace"
 
 /**
- * The MCP tools that become methods, by their upstream name (the tool id without the `<server>_` prefix). Only known
- * reads belong here: an allowlist, so a tool the server adds later is never a method. Slack's are the twelve reads,
- * the private search and the file read from `src/tools.ts`; the last two ask by default, so a script is refused them
- * until an allow rule exists. The plugin's own `slack_events_list` is the owned method `events_list`, registered in
- * setup.
+ * The MCP tools that become methods, by their upstream name (the tool id without the `<server>_` prefix): every tool
+ * in `KNOWN_TOOLS` (`src/tools.ts`), reads and writes alike. It is an allowlist, so a tool the server adds later is
+ * never a method until it is classified there. The private search and the file read are class `read`; the three
+ * `SEND_TOOLS` are `send`; every other write is `write`. The class never decides whether a call runs: the session's
+ * rules do, and at the default `access: "all"` they allow every method. Setup registers the plugin's own methods
+ * beside these: `events_list` (`slack_events_list`, class `read`), `mark_read` (`slack_mark_read`, class `write`, which
+ * calls Slack's `conversations.mark` through `src/slack-api.ts`) and `status` (`slack_status`, class `read`).
  */
 export const METHODS: readonly MethodSpec[] = Object.entries(KNOWN_TOOLS).map(([name, toolClass]): MethodSpec => ({
   kind: "mcp",
