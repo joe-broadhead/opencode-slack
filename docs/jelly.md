@@ -22,7 +22,7 @@ changes nothing in Jelly.
 - Ask: none. Every tool is declared `allow`, so a Jelly agent runs what the plugin's own default allows.
 - Off: none. To make one ask or stop, declare `ask` or `deny` for it, or set the plugin's `access` option in the agent's options.
 
-Private search and file reads are marked read-only and, like every tool, allowed by default; declare a later `ask` rule if the agent should not read private content. The plugin's own `slack.events_list` is for Memory's collector, which runs it unattended, so it never asks; each Slack read it makes follows that read's own effect. Its own `slack.mark_read` is a write (`readOnly: false`), allowed like every tool.
+Private search and file reads are marked read-only and, like every tool, allowed by default; declare a later `ask` rule if the agent should not read private content. The plugin's own `slack.events_list` is for Memory's collector, which runs it unattended, so it never asks; each Slack read it makes follows that read's own effect. Its own `slack.mark_read` is a write (`readOnly: false`), allowed like every tool. The tools RPC's `status` method, with its action `slack_status`, is not declared: `jelly.tools` lists the tools an agent can call, and `status` is a script method only, with no tool behind it, so a Jelly agent never sees it.
 
 A tool the upstream server adds later is not declared, so in Jelly it is not asked about by
 default. Keep `jelly.tools` in step with the known-tool list; `test/**/jelly.test.ts` checks

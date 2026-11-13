@@ -159,6 +159,12 @@ describe("the catalog the fake Slack server serves", () => {
     // Every tool Slack lists is declared, and the plugin's own events_list and mark_read.
     expect(jelly.jelly.tools.map((tool) => tool.name.replace(/^slack\./, "")).sort()).toEqual([...names, "events_list", "mark_read"].sort())
   })
+
+  test("the tools RPC's status method is a script method only, so Jelly does not declare it, and its page says why", () => {
+    const jelly = JSON.parse(read("package.json")) as { jelly: { tools: { name: string; permission?: string }[] } }
+    expect(jelly.jelly.tools.filter((tool) => tool.name.endsWith(".status") || tool.permission === "slack_status")).toEqual([])
+    expect(read("docs/jelly.md")).toContain("`status` is a script method only")
+  })
 })
 
 // The block an administrator copies into managed config: the README prints it in full, and the configuration guide
