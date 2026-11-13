@@ -89,7 +89,7 @@ export interface InstalledDescriptor {
 }
 /** The event fields a detail read may take its input from (Memory's schema): identifiers and metadata, never `title` or `text`. */
 export declare const DETAIL_FIELDS: readonly ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"];
-/** The `sources` value checked against the frame; its problems, one sentence each, when it breaks it. */
+/** The `sources` value checked against Memory's schema, then the frame; its problems, one sentence each, when it breaks them. */
 export declare function checkSources(value: unknown): Checked<SourcesDescriptor>;
 /** Canonical JSON: object keys sorted at every depth, no spaces. Arrays keep their order. */
 export declare function canonicalJson(value: unknown): string;

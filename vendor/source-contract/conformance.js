@@ -2,6 +2,11 @@
 import {
   SOURCES_SCHEMA
 } from "./chunks/chunk-AXAGCSNI.js";
+import {
+  REFUSAL_REASONS,
+  secretKinds
+} from "./chunks/chunk-ZTRH3FEM.js";
+import "./chunks/chunk-I2RXJJJM.js";
 import "./chunks/chunk-6RDMPYYW.js";
 import "./chunks/chunk-HLVAKAYG.js";
 
@@ -10818,14 +10823,15 @@ function pageChecks(answer, options) {
   const cost = [];
   const where = "the page";
   if (!plain2(answer)) return { shape: ["the page is not an object"], cursor: [], gap: [], refused: [], cost: [] };
-  if (answer["source"] !== options.source.id) shape.push(`${where} names source ${JSON.stringify(answer["source"])}, not ${options.source.id}`);
+  const named = typeof options.source.input?.["source"] === "string" ? options.source.input["source"] : options.source.id;
+  if (answer["source"] !== named) shape.push(`${where} names source ${JSON.stringify(answer["source"])}, not ${named}`);
   if (answer["plugin"] !== options.plugin) shape.push(`${where} names plugin ${JSON.stringify(answer["plugin"])}, not ${options.plugin}`);
   if (typeof answer["cursor"] !== "string") shape.push(`${where} cursor must be a string`);
   if (typeof answer["more"] !== "boolean") shape.push(`${where} more must be true or false`);
   const events = answer["events"];
   if (!Array.isArray(events)) shape.push(`${where} events must be a list`);
-  const refusedEntries = entries(answer["refused"], `${where} refused`, shape);
-  const failed = entries(answer["failed"], `${where} failed`, shape);
+  const refusedEntries = entries(answer["refused"], `${where} refused`, shape, "refused");
+  const failed = entries(answer["failed"], `${where} failed`, shape, "failed");
   gapChecks(answer["gap"], where, gap);
   costChecks(answer["cost"], options.source, where, cost);
   const seen = /* @__PURE__ */ new Set();
@@ -10835,6 +10841,10 @@ function pageChecks(answer, options) {
       continue;
     }
     seen.add(event["external_id"]);
+    const kinds = secretKinds([event["title"], event["text"]].filter((value) => typeof value === "string").join("\n"));
+    if (kinds.length > 0) {
+      refused.push(`${where} lists ${event["external_id"]} as an event, and its text holds a secret (${kinds.join(", ")}): it belongs in refused[] with reason "secret"`);
+    }
   }
   for (const id of new Set(refusedEntries)) {
     if (seen.has(id)) refused.push(`${where} lists ${id} as an event and in refused[]: a refusal is final`);
@@ -10854,7 +10864,7 @@ function pageProblems(answer, options) {
   const checks = pageChecks(answer, options);
   return [...checks.shape, ...checks.cursor, ...checks.gap, ...checks.refused, ...checks.cost];
 }
-function entries(value, where, problems) {
+function entries(value, where, problems, kind) {
   if (value === void 0) return [];
   if (!Array.isArray(value)) {
     problems.push(`${where} must be a list`);
@@ -10866,7 +10876,16 @@ function entries(value, where, problems) {
       problems.push(`${where}[${index}] must name the external_id it dropped`);
       continue;
     }
-    if (typeof entry["reason"] !== "string" || entry["reason"] === "") problems.push(`${where}[${index}] names no reason`);
+    if (kind === "refused") {
+      if (!REFUSAL_REASONS.includes(entry["reason"])) {
+        problems.push(`${where}[${index}] names no reason: a refusal is one of ${REFUSAL_REASONS.join(", ")}`);
+      }
+      if (entry["detail"] !== void 0 && (typeof entry["detail"] !== "string" || entry["detail"].length > 200 || /\n/.test(entry["detail"]))) {
+        problems.push(`${where}[${index}].detail must be one line of at most 200 characters`);
+      }
+    } else if (typeof entry["code"] !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(entry["code"])) {
+      problems.push(`${where}[${index}].code must be an error code such as RATE_LIMITED`);
+    }
     found.push(entry["external_id"]);
   }
   return found;
@@ -11006,8 +11025,8 @@ async function sourceConformance(options) {
   const context = { account, permission: running.permission };
   const bindContext = { account, permission: bind.permission };
   const checks = [];
-  const add = (name, problems2, ran = true, notApplicable = false) => {
-    checks.push({ name, ran, notApplicable, problems: problems2 });
+  const add = (name, problems2, ran = true, notApplicable = false, reason) => {
+    checks.push({ name, ran, notApplicable, ...reason === void 0 ? {} : { reason }, problems: problems2 });
   };
   const isEvents = source.kind === "events";
   add("declaration", declarationProblems({ contractVersion: 1, items: [source] }, { tools }));
@@ -11064,7 +11083,9 @@ async function sourceConformance(options) {
     }
   }
   add("page-result", shape, isEvents && cases.length > 0, !isEvents);
-  add("failed-holds-cursor", cursor, isEvents && sawFailed, !isEvents);
+  const atomicReason = options.atomicPages?.reason.trim() ?? "";
+  const atomic = isEvents && atomicReason !== "";
+  add("failed-holds-cursor", cursor, atomic ? false : isEvents && sawFailed, !isEvents || atomic, atomic ? atomicReason : void 0);
   add("gap-and-cursor-expired", gap, isEvents && sawGap, !isEvents);
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents);
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed");

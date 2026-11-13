@@ -219,9 +219,11 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       test("describes every known tool with its class and live schema, and the plugin's own methods; no unknown tool is a method", async () => {
         const { value } = await script("describe", {})
         expect(value.id).toBe(TOOLS_RPC_ID)
-        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "mark_read", "status"])
-        expect(value.methods.slice(-3)).toMatchObject([
+        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "probe", "slack_read_detail", "mark_read", "status"])
+        expect(value.methods.slice(-5)).toMatchObject([
           { name: "events_list", kind: "plugin", class: "read", action: "slack_events_list", available: true },
+          { name: "probe", kind: "plugin", class: "read", action: "slack_slack_read_user_profile", available: true },
+          { name: "slack_read_detail", kind: "plugin", class: "read", action: "slack_slack_read_thread", available: true },
           { name: "mark_read", kind: "plugin", class: "write", action: "slack_mark_read", available: true },
           { name: "status", kind: "plugin", class: "read", action: "slack_status", available: true },
         ])
@@ -295,7 +297,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
 
       test("describe with a session reports each method's permission; without one it omits it", async () => {
         const { value } = await script("describe", { sessionID: sessions.build })
-        const expected = Object.fromEntries([...METHODS.map((method) => [method.name, "allow"]), ["events_list", "allow"], ["mark_read", "allow"], ["status", "allow"]])
+        const expected = Object.fromEntries([...METHODS.map((method) => [method.name, "allow"]), ["events_list", "allow"], ["probe", "allow"], ["slack_read_detail", "allow"], ["mark_read", "allow"], ["status", "allow"]])
         expect(Object.fromEntries(value.methods.map((method: { name: string; permission: string }) => [method.name, method.permission]))).toEqual(expected)
         const plain = (await script("describe", {})).value
         expect(plain.methods.every((method: object) => !Object.hasOwn(method, "permission"))).toBe(true)

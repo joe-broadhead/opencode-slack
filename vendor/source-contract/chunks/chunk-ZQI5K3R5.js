@@ -1,5 +1,8 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
+  SOURCES_SCHEMA
+} from "./chunk-AXAGCSNI.js";
+import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-ELPJD3ND.js";
 import {
@@ -101,6 +104,8 @@ var sources = looseObject({
   }
 });
 function checkSources(value) {
+  const schema = SOURCES_SCHEMA.check(value);
+  if (!schema.ok) return { ok: false, problems: schema.problems.map((problem) => `sources.${problem}`.replace("sources.the value", "sources")) };
   const result = sources.safeParse(value);
   if (result.success) return { ok: true, value };
   return { ok: false, problems: problemsOf(result.error).map((problem) => `sources.${problem}`.replace("sources.the value", "sources")) };
