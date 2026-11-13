@@ -352,7 +352,12 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(result).toMatchObject({ type: "failed", code: "UPSTREAM_UNREADABLE" })
         expect(result.message).toContain("UPSTREAM_UNREADABLE: Slack's slack_read_user_profile answered in a shape events_list does not read.")
         expect(since(from)).toEqual(["slack_read_user_profile"])
-        expect(await run("build", "events_list", { limit: 0 })).toMatchObject({ type: "failed", code: "INPUT_INVALID" })
+        // Contract 2: limit 0 is the owner-only call, so the input check accepts it and it reads the profile alone.
+        const ownerFrom = host.toolCalls().length
+        const ownerOnly = await run("build", "events_list", { limit: 0 })
+        expect(ownerOnly).toMatchObject({ type: "failed", code: "UPSTREAM_UNREADABLE" })
+        expect(ownerOnly.message).toContain("UPSTREAM_UNREADABLE: Slack's slack_read_user_profile")
+        expect(since(ownerFrom)).toEqual(["slack_read_user_profile"])
       })
 
       test("without a Slack app client ID, refuses with CLIENT_ID_MISSING and /slack-status's next step", async () => {

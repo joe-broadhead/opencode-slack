@@ -16,7 +16,6 @@ permission rules, with the same tool Slack's server lists.
 | `slack_read_channel` | `slack_slack_read_channel` | The inner read of `events_list`, one conversation at a time. |
 | `slack_read_user_profile` | `slack_slack_read_user_profile` | The owner and the workspace, once per call. |
 | `slack_read_thread` | `slack_slack_read_thread` | A **thread job**'s read: a channel read lists only the replies Slack also sent to the channel, so a thread's other replies are read here, in a confirmed channel. |
-| `slack_list_user_channels` | `slack_slack_list_user_channels` | The confirm dialog's channel suggestions, on the owner-only call only (`probe`). A session without it still gets the owner and the account. |
 
 The source declares `contract: 2`: `limit: 0` answers the owner, `scope` narrows the read and is echoed, and `setup`
 names what to change when nothing can be read.
@@ -25,7 +24,8 @@ names what to change when nothing can be read.
 
 - **`channels`.** The conversations Memory may read, confirmed once. It is intersected with this plugin's
   `events.channels` option: a scope never widens the option, and with no option set the scope alone decides. The option
-  is therefore a **cap**, and whichever is narrower wins. The result echoes the conversations it actually read.
+  is therefore a **cap**, and whichever is narrower wins. Every result echoes the scope the call named (`{}` when it
+  named none, which is the whole source), and reads only what the cap allows.
 - **`thread`.** One thread's `message_ts`, pinned by the runner for each selected thread unit. It is not offered in the
   dialog (`suggest: false`, `required: false`): a person confirms channels, never one thread's timestamp.
 

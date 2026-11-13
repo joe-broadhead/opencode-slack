@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { EVENTS_ACTION, scopeChannels, slackEvents, SCOPE_KEYS, setupLine, type Read } from "../../src/events.js"
+import { resultProblems } from "../../src/host/events-list.js"
 import { KNOWN_TOOLS, READ_TOOLS } from "../../src/tools.js"
 import {
   assertMemoryConformance,
@@ -58,7 +59,6 @@ const eventsFixtures = {
   owner: OWNER,
   since: SINCE,
   scope: { channels: OPTION },
-  scopeOptionsKey: "channels",
   expected: [
     `${DM}:${tsOfOffset(NOW, 8_000)}`,
     `${PROJECT}:${tsOfOffset(NOW, 7_200)}`,
@@ -109,7 +109,7 @@ describe("the memory declaration", () => {
   })
 
   test("declares slack_read_thread for thread jobs, pinned to a confirmed channel and the one thread", () => {
-    const thread = (connector()["reads"] as Record<string, unknown>[]).find((read) => (read["input"] as Record<string, unknown>)["tool"] === "slack_read_thread")
+    const thread = (connector()["reads"] as Record<string, unknown>[]).find((read) => read["method"] === "slack_read_thread")
     expect(thread).toBeDefined()
     expect(thread!["scopeInputs"]).toEqual({ channel_id: "channels", message_ts: "thread" })
     expect(thread!["grants"]).toEqual([{ action: "slack_slack_read_thread", resource: "*" }])
@@ -124,15 +124,17 @@ describe("the memory declaration", () => {
     const declared = connectorReadNames(connector())
     expect(declared.length).toBeGreaterThan(0)
     for (const tool of declared) expect({ tool, read: READ_TOOLS.includes(tool) }).toEqual({ tool, read: true })
-    // The identity is events_list, which is a plugin-owned read method, not an MCP tool.
-    expect((connector()["identity"] as Record<string, unknown>)["input"]).toEqual({ tool: "events_list", input: { limit: 0 } })
+    // The identity is events_list, the plugin-owned read method, called as contract 2's owner-only call.
+    expect((connector()["identity"] as Record<string, unknown>)["method"]).toBe("events_list")
+    expect((connector()["identity"] as Record<string, unknown>)["input"]).toEqual({ limit: 0 })
     expect(EVENTS_ACTION).toBe("slack_events_list")
     expect(readVerbProblem(EVENTS_ACTION)).toBeUndefined()
     // The declaration never names a write: the fixture's own server lists them, and none is granted.
     for (const tool of Object.keys(KNOWN_TOOLS)) if (KNOWN_TOOLS[tool] === "write") expect(readVerbProblem(`slack_${tool}`)).toBeDefined()
+    for (const action of connectorActions(connector())) expect(action.action).not.toMatch(/list_user_channels/)
   })
 
-  test("the source declares contract 2, the actions events_list asserts, and the probe's extra read", () => {
+  test("the source declares contract 2 and exactly the actions events_list asserts", () => {
     expect(source()["contract"]).toBe(2)
     expect(source()["kinds"]).toEqual(["message"])
     expect(source()["grants"]).toEqual([
@@ -140,7 +142,6 @@ describe("the memory declaration", () => {
       { action: "slack_slack_read_user_profile", resource: "*" },
       { action: "slack_slack_read_channel", resource: "*" },
     ])
-    expect(source()["probe"]).toEqual({ grants: [{ action: "slack_slack_list_user_channels", resource: "*" }] })
     expect((source()["cadence"] as Record<string, unknown>)["everyMinutes"]).toBeGreaterThanOrEqual(15)
     expect(String(source()["setup"]).length).toBeLessThanOrEqual(300)
     expect(scopeKeys(connector())).toEqual(["channels", "thread"])
@@ -175,8 +176,9 @@ describe("the conformance kit", () => {
 
   test("fails when a read asserts an action the declaration does not grant", async () => {
     const broken = structuredClone(declaration())
-    const grants = (broken["connector"] as Record<string, unknown>)["reads"] as Record<string, unknown>[]
-    grants[0]!["grants"] = []
+    const connectorGrants = broken["connector"] as Record<string, unknown>
+    connectorGrants["identity"] = { ...(connectorGrants["identity"] as Record<string, unknown>), grants: [{ action: "slack_events_list", resource: "*" }] }
+    ;(connectorGrants["reads"] as Record<string, unknown>[])[0]!["grants"] = [{ action: "slack_slack_read_thread", resource: "*" }]
     const problems = await memoryConformance(conformance({ declaration: broken }))
     expect(problems).toContain("a read asserted slack_slack_read_channel, which the declaration does not grant")
   })
@@ -197,47 +199,42 @@ describe("the conformance kit", () => {
 })
 
 describe("the events_list contract, version 2", () => {
-  test("limit 0 is the owner-only call: the workspace and the owner, no events, and the choices to confirm", async () => {
+  test("limit 0 is the owner-only call: the workspace, the owner and the scope, no events and no channel read", async () => {
     const calls: string[] = []
     const read: Read = async (tool, input) => {
       calls.push(tool)
       return { output: answers(tool, input), text: JSON.stringify(answers(tool, input)) }
     }
     const result = await slackEvents(read, [], { limit: 0 }, NOW)
-    expect(result).toMatchObject({ source: "slack", account: SEED.team, owner: OWNER, events: [], cursor: "", more: false, trust: "untrusted" })
+    expect(result).toMatchObject({ source: "slack", account: SEED.team, owner: OWNER, events: [], more: false, trust: "untrusted" })
     expect(result.setup).toStartWith("Set the plugin option events.channels")
-    expect(result.scope).toEqual({ channels: [] })
-    expect(calls).toEqual(["slack_read_user_profile", "slack_list_user_channels"])
-    expect(result.scopeOptions?.["channels"]).toEqual(SEED.channels.map((channel) => ({ id: channel.id, label: channel.name })))
-    // With the option set, the owner-only call offers the channels that will actually be read, and reads no channel.
-    const narrowed = await slackEvents(read, [PROJECT], { limit: 0 }, NOW)
-    expect(narrowed.scopeOptions).toEqual({ channels: [{ id: PROJECT, label: PROJECT }] })
+    expect(result.scope).toEqual({})
+    expect(calls).toEqual(["slack_read_user_profile"])
+    // Its cursor is a real one: a later call with it lists from since, not from nowhere.
+    expect(result.cursor.length).toBeGreaterThan(0)
+    const next = await slackEvents(read, [PROJECT], { cursor: result.cursor, limit: 10 }, NOW)
+    expect(next.events.length).toBeGreaterThan(0)
+    expect(resultProblems(result, 0)).toEqual([])
   })
 
-  test("the owner-only call still answers without the probe grant", async () => {
-    const read: Read = async (tool, input) => {
-      if (tool === "slack_list_user_channels") throw Object.assign(new Error("Permission denied: slack_slack_list_user_channels"), { _tag: "Tool.Error", error: { _tag: "Permission.DeniedError" } })
-      return { output: answers(tool, input), text: "" }
-    }
-    const ownerOnly = await slackEvents(read, [], { limit: 0 }, NOW)
-    expect([ownerOnly.account, ownerOnly.owner, ownerOnly.scopeOptions]).toEqual([SEED.team, OWNER, undefined])
-    // An upstream failure is not swallowed: only a refusal is, because scopeOptions is optional.
-    const failing: Read = async () => {
-      throw Object.assign(new Error("x"), { _tag: "Tool.Error", message: "ratelimited" })
-    }
-    await expect(slackEvents(failing, [], { limit: 0 }, NOW)).rejects.toThrow(/^ratelimited$/)
+  test("a bad cursor and a scope the source does not read are refused by name", async () => {
+    const read: Read = async (tool, input) => ({ output: answers(tool, input), text: "" })
+    await expect(slackEvents(read, [PROJECT], { cursor: "not-a-cursor" }, NOW)).rejects.toThrow(/^CURSOR_INVALID: /)
+    await expect(slackEvents(read, [PROJECT], { scope: { channels: [] } }, NOW)).rejects.toThrow(/^INPUT_INVALID: /)
   })
 
-  test("scope narrows and never widens the plugin option, and the result echoes what it read", async () => {
+  test("scope narrows what is read and never widens the plugin option, and the result echoes the scope named", async () => {
     expect(scopeChannels([PROJECT, DM], { channels: [DM] })).toEqual([DM])
     expect(scopeChannels([PROJECT, DM], { channels: [PROJECT, OTHER] })).toEqual([PROJECT])
     expect(scopeChannels([], { channels: [OTHER] })).toEqual([OTHER])
     expect(scopeChannels([PROJECT], undefined)).toEqual([PROJECT])
-    expect(scopeChannels([PROJECT], { channels: [] })).toEqual([PROJECT])
 
     const read: Read = async (tool, input) => ({ output: answers(tool, input), text: "" })
     const result = await slackEvents(read, OPTION, { since: SINCE, scope: { channels: [PROJECT] } }, NOW)
     expect(result.scope).toEqual({ channels: [PROJECT] })
+    // With no scope named, the echo is {}: the whole source, which is the plugin's own cap.
+    const whole = await slackEvents(read, OPTION, { since: SINCE }, NOW)
+    expect(whole.scope).toEqual({})
     expect([...new Set(result.events.map((event) => event.labels.find((label) => label.startsWith("channel:"))))]).toEqual([`channel:${PROJECT}`])
     // A scope the option does not hold reads nothing, and setup says why.
     const outside = await slackEvents(read, OPTION, { since: SINCE, scope: { channels: [OTHER] } }, NOW)
@@ -249,7 +246,7 @@ describe("the events_list contract, version 2", () => {
     const read: Read = async (tool, input) => ({ output: answers(tool, input), text: "" })
     await expect(slackEvents(read, OPTION, { scope: { calendars: ["primary"] } }, NOW)).rejects.toThrow(/^SCOPE_UNKNOWN: This source reads only the scope key channels/)
     await expect(slackEvents(read, OPTION, { scope: { channels: ["#general"] } }, NOW)).rejects.toThrow(/^SCOPE_INVALID: A scope.channels value is not a Slack conversation or user id/)
-    await expect(slackEvents(read, OPTION, { scope: { channels: [PROJECT, PROJECT] } }, NOW)).rejects.toThrow(/^INPUT_INVALID: The events_list input is invalid: scope.channels repeats a value\./)
+    await expect(slackEvents(read, OPTION, { scope: { channels: [PROJECT, PROJECT] } }, NOW)).rejects.toThrow(/repeats an id/)
   })
 
   test("setup is empty while the source reads, and names what to change when it does not", () => {

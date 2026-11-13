@@ -4,14 +4,12 @@ import { SERVER } from "./defaults.js"
 import {
   EVENT_LIMITS,
   EVENTS_LIST,
-  OWNER_ONLY_LIMIT,
   PAGE,
-  SCOPE_OPTIONS_MAX,
+  copyScope,
   type EventsListRequest,
   type EventsListResult,
   type EventsOwner,
   type EventsScope,
-  type ScopeOption,
   type SourceEvent,
   cut,
   decodeCursor,
@@ -151,15 +149,10 @@ export const EVENTS_OUTPUT: JsonSchema = {
     trust: { type: "string", enum: ["untrusted"] },
     scope: {
       type: "object",
-      description: "The channels and direct messages this answer read: the call's scope or the events.channels option, narrowed to both",
+      description: "The scope the call named, echoed: its channels and direct messages. {} is the whole source, which reads the events.channels option",
       properties: { channels: { type: "array", items: STRING } },
     },
-    setup: { type: "string", description: `What to do before this source can list anything; empty when nothing is needed, at most ${EVENT_LIMITS.setup} characters` },
-    scopeOptions: {
-      type: "object",
-      description: "On the owner-only call: the channels and direct messages the person can pick, when Slack lists them for this sign-in",
-      properties: { channels: { type: "array", items: { type: "object", required: ["id", "label"], properties: { id: STRING, label: STRING } } } },
-    },
+    setup: { type: "string", description: "One line on what to set up before this source can list anything; empty when nothing is needed" },
   },
 }
 
@@ -173,14 +166,11 @@ function eventsRequest(input: unknown): EventsListRequest {
   if (scope !== undefined) {
     const unknown = Object.keys(scope).find((key) => !(SCOPE_KEYS as readonly string[]).includes(key))
     if (unknown !== undefined) {
-      throw eventsError("SCOPE_UNKNOWN", `This source reads only the scope key ${SCOPE_KEYS.join(", ")}; the call named another.`, `Pass scope.channels, the channels and direct messages to collect, or leave scope out.`)
+      throw eventsError("SCOPE_UNKNOWN", `This source reads only the scope key ${SCOPE_KEYS.join(", ")}; the call named another.`, "Pass scope.channels, the channels and direct messages to collect, or leave scope out.")
     }
     const channels = scope.channels ?? []
     if (!channels.every((id) => CHANNEL_ID.test(id))) {
       throw eventsError("SCOPE_INVALID", "A scope.channels value is not a Slack conversation or user id.", "Pass the ids of the channels and direct messages to collect, such as C0123ABCD45.")
-    }
-    if (channels.length > MAX_CHANNELS) {
-      throw eventsError("SCOPE_INVALID", `scope.channels lists more than ${MAX_CHANNELS} channels.`, `Confirm at most ${MAX_CHANNELS} channels and direct messages.`)
     }
   }
   return parsed.value
@@ -408,67 +398,6 @@ export function profileOf(answer: Answer): { owner: EventsOwner; team?: string; 
   }
 }
 
-// ── Scope options ────────────────────────────────────────────────────────
-
-/** A label line naming a conversation: `Channel: #general (C0123ABCD45)`, `- **ID:** C0123ABCD45`. */
-const CONVERSATION = /^[\s\-*]*(?:channel|conversation|id|channel_?id)\s*:?\s*\**\s*(?:#?[^()\n]*?\(?)?\b([CDGUW][A-Z0-9]{8,12})\b/i
-
-/**
- * The choices `slack_list_user_channels` offers, from Slack's structured `channels` list when it answers in one, or
- * from the labelled lines it writes instead. An answer this parser does not read offers nothing, which is allowed:
- * `scopeOptions` is optional, and the `events.channels` option is the other way to choose.
- */
-export function channelChoices(answer: Answer): ScopeOption[] {
-  let output = answer.output
-  if (output === undefined || typeof output === "string") {
-    try {
-      output = JSON.parse(typeof output === "string" ? output : answer.text) as unknown
-    } catch {
-      output = undefined
-    }
-  }
-  const list = record(output)["channels"]
-  if (Array.isArray(list)) {
-    const found = new Map<string, string>()
-    for (const item of list) {
-      const entry = record(item)
-      const id = text(entry["id"]) ?? text(entry["channel_id"])
-      if (id === undefined || !CHANNEL_ID.test(id)) continue
-      const label = text(entry["name"]) ?? text(entry["channel_name"]) ?? text(entry["label"]) ?? id
-      found.set(id, label)
-    }
-    if (found.size > 0) return [...found].map(([id, label]) => ({ id, label: cut(label, EVENT_LIMITS.ownerLabel) }))
-  }
-  const found = new Map<string, string>()
-  for (const line of answer.text.split(/\r?\n/)) {
-    const id = CONVERSATION.exec(line)?.[1]
-    if (id === undefined || found.has(id)) continue
-    const name = plain(line.replace(/`/g, "").replace(CONVERSATION, "").replace(/\([^()]*\)/g, "").replace(/^[\s\-*:]+/, "")).replace(/\s+/g, " ")
-    found.set(id, name === "" ? id : cut(name, EVENT_LIMITS.ownerLabel))
-  }
-  return [...found].map(([id, label]) => ({ id, label }))
-}
-
-/**
- * The choices for the owner-only call: the confirmed channels when the option narrows to them, otherwise what Slack
- * lists for this sign-in. `scopeOptions` is optional, so a session without the probe grant (`slack_list_user_channels`,
- * a read this method does not otherwise assert) still gets the account and the owner.
- */
-async function channelOptions(read: Read, allowed: readonly string[], capped: boolean): Promise<Record<string, ScopeOption[]> | undefined> {
-  // A capped source answers with the conversations that will actually be read, never with ones the cap excludes.
-  if (capped) return { channels: allowed.slice(0, SCOPE_OPTIONS_MAX).map((id) => ({ id, label: id })) }
-  let answer: Answer
-  try {
-    answer = await read("slack_list_user_channels", { types: "public_channel,private_channel,mpim,im", limit: SCOPE_OPTIONS_MAX })
-  } catch (error) {
-    const known = error as { _tag?: unknown; error?: unknown }
-    if (known._tag === "Tool.Error" && known.error !== undefined) return undefined
-    throw error
-  }
-  const choices = channelChoices(answer).slice(0, SCOPE_OPTIONS_MAX)
-  return choices.length === 0 ? undefined : { channels: choices }
-}
-
 // ── Events ──────────────────────────────────────────────────────────────
 
 const kindOfChannel = (channel: string) => (/^C/.test(channel) ? "channel" : /^G/.test(channel) ? "group" : "dm")
@@ -582,15 +511,15 @@ export async function slackEvents(read: Read, optionChannels: readonly string[],
   if (request.account !== undefined && request.account !== account) {
     throw eventsError("ACCOUNT_UNKNOWN", "The signed-in Slack workspace is not the account events_list was asked for.", `Leave "account" out, or pass "${account}", the signed-in workspace.`)
   }
-  const identity = { source: SLACK_SOURCE, account, owner: profile.owner }
   const channels = scopeChannels(optionChannels, request.scope)
-  const scope: EventsScope = { channels }
-  const setup = setupLine(channels, optionChannels)
-  if (request.limit === OWNER_ONLY_LIMIT) {
-    const scopeOptions = await channelOptions(read, channels, optionChannels.length > 0)
-    return eventsListResult(identity, [], { cursor: "", more: false, scope, setup, ...(scopeOptions === undefined ? {} : { scopeOptions }) })
-  }
+  // The scope a result echoes is the one the call named, as contract 2 requires: `{}` is the whole source (the plugin's
+  // own `events.channels` cap), and a call that names channels echoes those, never more.
+  const identity = { source: SLACK_SOURCE, account, owner: profile.owner, scope: copyScope(request.scope ?? {}), setup: setupLine(channels, optionChannels) }
   const binding = bindingOf(account, profile.owner)
+  if (request.limit === 0) {
+    // The owner-only call reads no channel. Its cursor is the empty listing's, so a later call with it starts at since.
+    return eventsListResult(identity, [], encodeCursor(SLACK_SOURCE, { o: binding, c: {} }), false)
+  }
   const known = request.cursor === undefined ? new Map<string, bigint>() : boundsOf(request.cursor, binding)
   // The bound is exclusive: one microsecond before the start lists a message posted at the start itself.
   const start = BigInt(startTime(request, now)) * 1000n - 1n
@@ -613,12 +542,7 @@ export async function slackEvents(read: Read, optionChannels: readonly string[],
   )
   for (const item of listed.slice(0, kept)) bounds.set(item.channel, item.at)
   const cursor = encodeCursor(SLACK_SOURCE, { o: binding, c: Object.fromEntries([...bounds].map(([channel, at]) => [channel, tsOf(at)])) })
-  return eventsListResult(identity, listed.slice(0, kept).map((item) => item.event), {
-    cursor,
-    more: more || kept < listed.length,
-    scope,
-    setup,
-  })
+  return eventsListResult(identity, listed.slice(0, kept).map((item) => item.event), cursor, more || kept < listed.length)
 }
 
 // ── The tool and the tools RPC method ───────────────────────────────────
@@ -666,11 +590,12 @@ function reader(options: EventsToolOptions, context: Context): Read {
   }
 }
 
-function summary(result: EventsListResult) {
-  if (result.cursor === "") {
+function summary(result: EventsListResult, ownerOnly: boolean, optionChannels: readonly string[]) {
+  if (ownerOnly) {
     return `Slack: ${result.owner.label} (${result.owner.id}) in the workspace ${result.account}. The owner-only call listed no events.${result.setup === "" ? "" : ` ${result.setup}`}`
   }
-  const channels = result.scope.channels ?? []
+  // The conversations the call read: its echoed scope intersected with the plugin's own cap, as it read them.
+  const channels = scopeChannels(optionChannels, result.scope)
   const count = result.events.length
   return [
     channels.length === 0
@@ -712,7 +637,7 @@ export function eventsTool(options: EventsToolOptions) {
         source: { type: "tool", messageID: context.messageID, id: context.id },
       })
       const output = await slackEvents(reader(options, context), options.channels, input, options.now?.() ?? Date.now())
-      return { output, content: summary(output) }
+      return { output, content: summary(output, (input as { limit?: unknown } | null)?.limit === 0, options.channels) }
     },
   }
 }

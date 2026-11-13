@@ -31,7 +31,10 @@ afterAll(() => {
 }, { timeout: 120_000 })
 
 const MAX_ENTRIES = 50
-const MAX_UNPACKED_BYTES = 150 * 1024
+// A guard against a runaway bundle, not a target: the tarball holds the two bundles, the README and CHANGELOG, the
+// skill, the icons and package.json, and the Memory connector v2 declaration and the contract-2 code moved it near the
+// old 150 KiB. 168 KiB keeps a visible ceiling with room for the next declared read.
+const MAX_UNPACKED_BYTES = 168 * 1024
 // The host packages OpenCode 2.2.3 provides to plugins, at the versions pinned for development.
 const HOST_PACKAGES = ["@opencode/plugin", "@opentui/core", "@opentui/solid", "solid-js"]
 const SERVER_MODULES = [/^node:/, /^@opencode\/plugin(?:\/|$)/]

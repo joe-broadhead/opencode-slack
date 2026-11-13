@@ -318,22 +318,20 @@
     "connector": {
       "accounts": "single",
       "identity": {
-        "method": "read",
-        "input": {
-          "tool": "events_list",
-          "input": { "limit": 0 }
-        },
+        "method": "events_list",
+        "input": { "limit": 0 },
         "grants": [
           { "action": "slack_events_list", "resource": "*" },
-          { "action": "slack_slack_read_user_profile", "resource": "*" }
+          { "action": "slack_slack_read_user_profile", "resource": "*" },
+          { "action": "slack_slack_read_channel", "resource": "*" }
         ],
         "account": "$.account",
         "owner": { "id": "$.owner.id", "label": "$.owner.label" }
       },
       "reads": [
         {
-          "method": "read",
-          "input": { "tool": "slack_read_channel" },
+          "method": "slack_read_channel",
+          "input": {  },
           "grants": [ { "action": "slack_slack_read_channel", "resource": "*" } ],
           "scopeInputs": { "channel_id": "channels" },
           "kinds": [ "message" ],
@@ -341,8 +339,8 @@
           "billing": null
         },
         {
-          "method": "read",
-          "input": { "tool": "slack_read_thread" },
+          "method": "slack_read_thread",
+          "input": {  },
           "grants": [ { "action": "slack_slack_read_thread", "resource": "*" } ],
           "scopeInputs": { "channel_id": "channels", "message_ts": "thread" },
           "kinds": [ "message" ],
@@ -384,9 +382,6 @@
           { "action": "slack_slack_read_user_profile", "resource": "*" },
           { "action": "slack_slack_read_channel", "resource": "*" }
         ],
-        "probe": {
-          "grants": [ { "action": "slack_slack_list_user_channels", "resource": "*" } ]
-        },
         "scope": [
           {
             "key": "channels",

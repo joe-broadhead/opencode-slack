@@ -1,6 +1,6 @@
-// Memory's conformance kit for a connector plugin (Memory Jobs design §9.3). Shared module: each connector plugin
-// keeps an identical copy at `test/support/memory-kit.ts`, because each suite stands alone; `scripts/check-copies.mjs`
-// fails when a copy drifts. Change it in every plugin at once, then update the hash there.
+// Memory's conformance kit for a connector plugin (Memory Jobs design §9.3). It lives here, in `test/support/`, until
+// Memory publishes `plugin-kit/memory-kit.ts` (opencode-mem, §9.2, not shipped yet); then this file is replaced by that
+// one and both plugins carry it byte for byte. `scripts/check-copies.mjs` pins it anyway, so a copy cannot drift.
 //
 // What it checks, against `package.json#memory` (schema v2) and the plugin's own answers:
 //
@@ -132,14 +132,11 @@ export function scopeKeys(connector: unknown): string[] {
   return scope.flatMap((entry) => (plainObject(entry) && typeof entry["key"] === "string" ? [entry["key"]] : []))
 }
 
-/** The tool names a connector's reads name in their `input`. */
+/** The tools RPC methods a connector's reads name. */
 export function connectorReadNames(connector: unknown): string[] {
   const reads = plainObject(connector) ? connector["reads"] : undefined
   if (!Array.isArray(reads)) return []
-  return reads.flatMap((read) => {
-    const input = plainObject(read) ? read["input"] : undefined
-    return plainObject(input) && typeof input["tool"] === "string" ? [input["tool"]] : []
-  })
+  return reads.flatMap((read) => (plainObject(read) && typeof read["method"] === "string" ? [read["method"]] : []))
 }
 
 function connectorProblems(connector: unknown, namespace: string): string[] {
@@ -188,8 +185,8 @@ function connectorProblems(connector: unknown, namespace: string): string[] {
   if (!plainObject(identity)) problems.push(`"connector.identity" must be an object: the account and owner call`)
   else {
     for (const key of Object.keys(identity)) if (!["method", "input", "grants", "account", "owner"].includes(key)) problems.push(`"connector.identity" has "${key}", which schema v2 does not define`)
-    if (identity["method"] !== "read") problems.push(`"connector.identity.method" must be "read"`)
-    if (!plainObject(identity["input"]) || Object.keys(identity["input"]).length === 0) problems.push(`"connector.identity.input" must name the read's input`)
+    if (typeof identity["method"] !== "string" || identity["method"].length === 0) problems.push(`"connector.identity.method" must name the tools RPC method that answers the account and owner`)
+    if (!plainObject(identity["input"])) problems.push(`"connector.identity.input" must be the method's input`)
     problems.push(...grantProblems(identity["grants"], `connector.identity.grants`, namespace))
     for (const field of ["account", "owner"]) {
       if (field === "account" && (typeof identity["account"] !== "string" || !identity["account"].startsWith("$."))) problems.push(`"connector.identity.account" must be a JSONPath starting $.`)
@@ -213,9 +210,8 @@ function connectorProblems(connector: unknown, namespace: string): string[] {
         continue
       }
       for (const key of Object.keys(read)) if (!["method", "input", "grants", "scopeInputs", "kinds", "cursor", "billing"].includes(key)) problems.push(`${at} has "${key}", which schema v2 does not define`)
-      if (read["method"] !== "read") problems.push(`${at}.method must be "read"`)
-      const input = read["input"]
-      if (!plainObject(input) || Object.keys(input).length === 0) problems.push(`${at}.input must name the read's tool or operation`)
+      if (typeof read["method"] !== "string" || read["method"].length === 0) problems.push(`${at}.method must name the tools RPC method`)
+      if (!plainObject(read["input"])) problems.push(`${at}.input must be an object, empty when the method takes no fixed input`)
       problems.push(...grantProblems(read["grants"], `${at}.grants`, namespace))
       const inputs = read["scopeInputs"]
       if (inputs === undefined) {
@@ -515,8 +511,8 @@ export async function memoryConformance(input: MemoryConformance): Promise<strin
   const executors = await session.tool.list()
 
   for (const [index, read] of declaredReads(input.declaration).entries()) {
-    const tool = plainObject(read["input"]) ? read["input"]["tool"] : undefined
-    if (typeof tool !== "string") continue
+    const tool = stableToolName(read)
+    if (tool === undefined) continue
     const sample = input.samples?.[tool]
     if (sample === undefined) {
       problems.push(`connector.reads[index ${index}] (${tool}) has no sample input, so the kit cannot run it`)
@@ -593,6 +589,16 @@ function eventsListThrough(list: EventsListWithRead, call: EventsListInput, exec
 }
 
 const plainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+
+/**
+ * The tools RPC method a read names, or its `input.tool` when the declaration names the tool inside the input (an MCP
+ * server's method is the tool's own name, so both spellings point at the same executor).
+ */
+function stableToolName(read: Record<string, unknown>): string | undefined {
+  if (typeof read["method"] === "string" && read["method"] !== "read") return read["method"]
+  const input = plainObject(read["input"]) ? read["input"] : undefined
+  return input !== undefined && typeof input["tool"] === "string" ? input["tool"] : typeof read["method"] === "string" ? read["method"] : undefined
+}
 
 /** The connector's grants, flattened: the identity's, the reads' and the source probes'. */
 function connectorGrantList(declaration: unknown): Grant[] {
