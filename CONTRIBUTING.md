@@ -33,6 +33,10 @@ OPENCODE_BIN_2_2_3=/path/to/2.2.3/opencode OPENCODE_BIN_2_2_4=/path/to/2.2.4/ope
 
 `test/host/slack-catalog.ts` holds Slack's tool schemas as OpenCode lists them; the fake server serves them, and the docs test checks every parameter the skill and docs name against them. To compare it with the live server, run OpenCode with Slack signed in, then `npm run drift`. It reads the tools RPC's `describe` (`opencode api post /api/rpc/slack.workspace.tools/describe`) and reports each read tool whose types, allowed values, parameters or required names differ. It covers the reads only, because writes are never methods: check the write signatures with Code Mode's `search({ namespace: "slack" })`. It is not part of `npm run check`.
 
+## Checking the Web API calls live
+
+`bun scripts/live-web-api.ts` checks, with a real Slack sign-in in a scratch OpenCode home, that Slack's Web API accepts the MCP sign-in's token for `auth.test` and, only on a conversation you name with `--mark`, `conversations.mark`. It records status codes, Slack's `ok` and `error`, and the scope headers only. See [docs/live-check.md](docs/live-check.md). It is not part of `npm run check` or CI.
+
 ## Changing Slack's tool table
 
 `src/tools.ts` classifies Slack's tools. When status names an unknown tool, check it in Slack's MCP documentation and choose its class: `read` for tools that change nothing; `private` for searches across private conversations; `file` for file contents; `write` for anything that creates, changes, sends or uploads. Update `src/tools.ts`, the tests, the tables in `docs/configuration.md` and the README, and `CHANGELOG.md`.
