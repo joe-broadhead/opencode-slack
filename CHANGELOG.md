@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.1] - 2026-11-13
 
 ### Added
 
@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - The tools RPC's `status` method (`slack_status`, allowed at every `access`). Thanks to @domeevans (#18).
 - `slack_mark_read` / `mark_read` (write): Slack's `conversations.mark`. Needs a `:write` scope; `SCOPE_MISSING` without it. Thanks to @domeevans (#18).
 - `oauth.auth_server_metadata_url`, passed unchanged into the `slack` server's `oauth` block, so a host with an `https:` callback can keep Slack's client secret on its own sign-in service. OpenCode uses that document in place of Slack's for the whole sign-in; `SECURITY.md` says what its server controls. Without it the entry is unchanged.
+- The `jelly` `access` setting declares its choices (needs a jelly that includes app#1301).
 - The README and `docs/configuration.md` say that Slack refreshes without a secret only for desktop redirects, and answers a refused refresh with HTTP 200 `bad_client_secret`.
 
 ### Changed
