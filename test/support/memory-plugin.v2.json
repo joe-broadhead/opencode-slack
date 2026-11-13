@@ -1,0 +1,939 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/joe-broadhead/opencode-mem/HEAD/plugin-kit/schema/memory-plugin.v2.json",
+  "title": "opencode-mem plugin declaration, schema v2",
+  "description": "The `memory` key of a plugin's package.json. Memory reads it from the installed package on disk. Contract: docs/design of the Memory Jobs design, \u00a79.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "namespace"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 2
+    },
+    "namespace": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,23}$"
+    },
+    "connector": {
+      "$ref": "#/$defs/connector"
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "templates": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/template"
+      }
+    }
+  },
+  "$defs": {
+    "grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "resource"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "not": {
+            "pattern": "(^|[._-])(?:acknowledge|disconnect|unarchive|broadcast|overwrite|duplicate|unpublish|schedule|download|complete|dispatch|truncate|transfer|escalate|generate|bookmark|archive|approve|execute|comment|message|forward|promote|restore|mention|resolve|decline|dismiss|disable|connect|signout|publish|reindex|convert|create|update|delete|remove|upload|reopen|reject|invite|commit|follow|assign|toggle|export|revoke|demote|rename|attach|detach|notify|cancel|submit|snooze|enable|logout|signin|verify|unhide|ingest|import|unlike|write|merge|close|share|react|draft|patch|reply|block|unpin|label|trash|clear|flush|reset|apply|leave|unban|grant|purge|login|issue|index|print|send|post|move|exec|edit|push|mute|star|lock|join|kick|wipe|drop|vote|mint|hide|sync|save|like|mark|copy|add|set|run|put|pin|ban|ack)([._-]|$)|(^|[._-])(and|then|or)([._-]|$)"
+          }
+        },
+        "resource": {
+          "type": "string",
+          "anyOf": [
+            {
+              "const": "*"
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{account\\}:([A-Za-z0-9_-]+\\.)*(?:describe|history|search|lookup|status|query|count|read|list|view|get)[A-Za-z0-9_]*$"
+            }
+          ],
+          "not": {
+            "pattern": "(^|[._-])(and|then|or)([._-]|$)"
+          }
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "grants",
+        "account",
+        "owner"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "events_list"
+          ]
+        },
+        "input": {
+          "type": "object"
+        },
+        "grants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/grant"
+          }
+        },
+        "account": {
+          "type": "string",
+          "pattern": "^\\$\\."
+        },
+        "owner": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "label"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^\\$\\."
+            },
+            "label": {
+              "type": "string",
+              "pattern": "^\\$\\."
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "events_list"
+              }
+            },
+            "required": [
+              "method"
+            ]
+          },
+          "then": {
+            "properties": {
+              "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "limit"
+                ],
+                "properties": {
+                  "limit": {
+                    "const": 0
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "account": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "read": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "grants",
+        "scopeInputs",
+        "kinds"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "not": {
+            "pattern": "(^|[._-])(?:acknowledge|disconnect|unarchive|broadcast|overwrite|duplicate|unpublish|schedule|download|complete|dispatch|truncate|transfer|escalate|generate|bookmark|archive|approve|execute|comment|message|forward|promote|restore|mention|resolve|decline|dismiss|disable|connect|signout|publish|reindex|convert|create|update|delete|remove|upload|reopen|reject|invite|commit|follow|assign|toggle|export|revoke|demote|rename|attach|detach|notify|cancel|submit|snooze|enable|logout|signin|verify|unhide|ingest|import|unlike|write|merge|close|share|react|draft|patch|reply|block|unpin|label|trash|clear|flush|reset|apply|leave|unban|grant|purge|login|issue|index|print|send|post|move|exec|edit|push|mute|star|lock|join|kick|wipe|drop|vote|mint|hide|sync|save|like|mark|copy|add|set|run|put|pin|ban|ack)([._-]|$)|(^|[._-])(and|then|or)([._-]|$)"
+          }
+        },
+        "input": {
+          "type": "object"
+        },
+        "grants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/grant"
+          }
+        },
+        "scopeInputs": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,31}$"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "perUnit",
+                  "bind"
+                ],
+                "properties": {
+                  "perUnit": {
+                    "enum": [
+                      "external_id",
+                      "thread_channel",
+                      "thread_ts"
+                    ]
+                  },
+                  "bind": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "kinds": {
+          "$ref": "#/$defs/kinds"
+        },
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "billing": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "unit"
+              ],
+              "properties": {
+                "unit": {
+                  "const": "call"
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "scopeKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "title",
+        "kind",
+        "pattern",
+        "max",
+        "required"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "kind": {
+          "const": "ids"
+        },
+        "pattern": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "suggest": {
+          "type": "boolean"
+        },
+        "suggestBy": {
+          "$ref": "#/$defs/suggestBy"
+        }
+      }
+    },
+    "suggestBy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "grants"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "not": {
+            "pattern": "(^|[._-])(?:acknowledge|disconnect|unarchive|broadcast|overwrite|duplicate|unpublish|schedule|download|complete|dispatch|truncate|transfer|escalate|generate|bookmark|archive|approve|execute|comment|message|forward|promote|restore|mention|resolve|decline|dismiss|disable|connect|signout|publish|reindex|convert|create|update|delete|remove|upload|reopen|reject|invite|commit|follow|assign|toggle|export|revoke|demote|rename|attach|detach|notify|cancel|submit|snooze|enable|logout|signin|verify|unhide|ingest|import|unlike|write|merge|close|share|react|draft|patch|reply|block|unpin|label|trash|clear|flush|reset|apply|leave|unban|grant|purge|login|issue|index|print|send|post|move|exec|edit|push|mute|star|lock|join|kick|wipe|drop|vote|mint|hide|sync|save|like|mark|copy|add|set|run|put|pin|ban|ack)([._-]|$)|(^|[._-])(and|then|or)([._-]|$)"
+          }
+        },
+        "input": {
+          "type": "object"
+        },
+        "grants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/grant"
+          }
+        },
+        "ids": {
+          "type": "string",
+          "pattern": "^\\$\\."
+        },
+        "labels": {
+          "type": "string",
+          "pattern": "^\\$\\."
+        }
+      }
+    },
+    "kinds": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 9,
+      "items": {
+        "enum": [
+          "message",
+          "meeting",
+          "session",
+          "bookmark",
+          "issue",
+          "pr",
+          "commit",
+          "doc",
+          "event"
+        ]
+      }
+    },
+    "billing": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unit"
+          ],
+          "properties": {
+            "unit": {
+              "const": "call"
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        }
+      ]
+    },
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accounts",
+        "scope"
+      ],
+      "properties": {
+        "accounts": {
+          "enum": [
+            "single",
+            "multi"
+          ]
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "reads": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/read"
+          }
+        },
+        "scope": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/scopeKey"
+          }
+        },
+        "billing": {
+          "$ref": "#/$defs/billing"
+        },
+        "operationScoped": {
+          "type": "boolean"
+        },
+        "identityRead": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "grants",
+            "account",
+            "owner"
+          ],
+          "properties": {
+            "method": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{1,63}$",
+              "not": {
+                "pattern": "(^|[._-])(send|create|update|delete|write|post|remove|add|set|schedule|upload|download|archive|unarchive|move|merge|close|reopen|approve|reject|share|invite|react|draft|complete|run|exec|execute|edit|patch|put|push|commit|comment|reply|message|broadcast|follow|block|mute|pin|unpin|star|assign|label|lock|trash)([._-]|$)"
+              }
+            },
+            "input": {
+              "type": "object"
+            },
+            "grants": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/grant"
+              }
+            },
+            "account": {
+              "type": "string",
+              "pattern": "^\\$\\."
+            },
+            "owner": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "label"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^\\$\\."
+                },
+                "label": {
+                  "type": "string",
+                  "pattern": "^\\$\\."
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operationScoped": {
+                "const": true
+              }
+            },
+            "required": [
+              "operationScoped"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reads": {
+                "items": {
+                  "not": {
+                    "properties": {
+                      "grants": {
+                        "type": "array",
+                        "contains": {
+                          "type": "object",
+                          "properties": {
+                            "action": {
+                              "type": "string",
+                              "pattern": "\\."
+                            },
+                            "resource": {
+                              "const": "*"
+                            }
+                          },
+                          "required": [
+                            "action",
+                            "resource"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "grants"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "type": "array"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "summary",
+        "contract",
+        "kinds",
+        "grants",
+        "cadence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "contract": {
+          "const": 2
+        },
+        "kinds": {
+          "$ref": "#/$defs/kinds"
+        },
+        "grants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/grant"
+          }
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "scope": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/scopeKey"
+          }
+        },
+        "cadence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "everyMinutes"
+          ],
+          "properties": {
+            "everyMinutes": {
+              "type": "integer",
+              "minimum": 15,
+              "maximum": 1440
+            }
+          }
+        },
+        "billing": {
+          "$ref": "#/$defs/billing"
+        },
+        "setupHint": {
+          "type": "string",
+          "maxLength": 300
+        }
+      }
+    },
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          }
+        },
+        "kinds": {
+          "$ref": "#/$defs/kinds"
+        },
+        "labels": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string"
+          }
+        },
+        "unit": {
+          "enum": [
+            "event",
+            "thread"
+          ]
+        },
+        "participant": {
+          "const": "owner"
+        },
+        "latest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "per"
+          ],
+          "properties": {
+            "per": {
+              "type": "string",
+              "maxLength": 40
+            }
+          }
+        },
+        "window": {
+          "enum": [
+            "1d",
+            "7d",
+            "31d"
+          ]
+        },
+        "minEvents": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxUnits": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector",
+        "source"
+      ],
+      "properties": {
+        "use": {
+          "const": "events_list"
+        },
+        "call": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "connector": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "with": {
+          "type": "object"
+        },
+        "for": {
+          "enum": [
+            "thread",
+            "unit"
+          ]
+        },
+        "paginate": {
+          "type": "object"
+        },
+        "cursor": {
+          "type": "object"
+        },
+        "emit": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "use"
+          ]
+        },
+        {
+          "required": [
+            "call"
+          ]
+        }
+      ]
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "engine",
+            "into",
+            "line",
+            "max"
+          ],
+          "properties": {
+            "engine": {
+              "const": "render"
+            },
+            "select": {
+              "$ref": "#/$defs/selector"
+            },
+            "into": {
+              "type": "string",
+              "pattern": "^(journal|timeline|section:[A-Z][A-Za-z0-9 ]{0,39})$"
+            },
+            "heading": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "line": {
+              "type": "string",
+              "maxLength": 400
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "engine",
+            "outputs"
+          ],
+          "properties": {
+            "engine": {
+              "const": "extract"
+            },
+            "select": {
+              "$ref": "#/$defs/selector"
+            },
+            "hints": {
+              "type": "string",
+              "maxLength": 1500
+            },
+            "outputs": {
+              "$ref": "#/$defs/outputs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "engine",
+            "into",
+            "max"
+          ],
+          "properties": {
+            "engine": {
+              "const": "synthesize"
+            },
+            "select": {
+              "$ref": "#/$defs/selector"
+            },
+            "into": {
+              "type": "string",
+              "pattern": "^section:[A-Z][A-Za-z0-9 ]{0,39}$"
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        }
+      ]
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "anyOf": [
+          {
+            "enum": [
+              "journal",
+              "timeline",
+              "proposal:decision",
+              "proposal:fact",
+              "proposal:commitment_open",
+              "proposal:commitment_close",
+              "proposal:procedure",
+              "proposal:person",
+              "proposal:link"
+            ]
+          },
+          {
+            "type": "string",
+            "pattern": "^section:[A-Z][A-Za-z0-9 ]{0,39}$"
+          }
+        ]
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "summary",
+        "extract",
+        "transform",
+        "curate",
+        "outputs"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "trigger": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schedule": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "every": {
+                  "type": "string",
+                  "pattern": "^[0-9]{1,4}(m|h|d)$"
+                },
+                "cron": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "tz": {
+                  "type": "string",
+                  "maxLength": 60
+                }
+              }
+            }
+          }
+        },
+        "extract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "steps"
+          ],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/step"
+              }
+            }
+          }
+        },
+        "transform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "into"
+          ],
+          "properties": {
+            "into": {
+              "enum": [
+                "events",
+                "documents"
+              ]
+            },
+            "map": {
+              "type": "object"
+            }
+          }
+        },
+        "curate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stages"
+          ],
+          "properties": {
+            "stages": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/stage"
+              }
+            }
+          }
+        },
+        "outputs": {
+          "$ref": "#/$defs/outputs"
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tokensPerRun": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 25000
+            }
+          }
+        }
+      }
+    }
+  }
+}

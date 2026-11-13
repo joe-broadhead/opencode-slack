@@ -87,6 +87,11 @@ export type EventsScope = Readonly<Record<string, readonly string[]>>
 /** Where a listing starts when the call has neither cursor nor since: this many hours before now. */
 export const FIRST_RUN_HOURS = 24
 
+/** Contract 2's `gap`: the reasons a source restarted its window, and the furthest back `since` may name. */
+export const GAP_REASONS = ["sync-token-expired", "cursor-invalid", "window-truncated"] as const
+export type GapReason = (typeof GAP_REASONS)[number]
+export const GAP_MAX_DAYS = 31
+
 export const TRUST = "untrusted" as const
 
 /** Someone or something an event involves. `id` is a stable, scheme-qualified id: `mailto:…`, `slack:U…`, `github:…`. */
@@ -121,6 +126,17 @@ export interface EventsOwner {
   readonly label: string
 }
 
+/**
+ * Contract 2's `gap`: the source restarted its window, so Memory may have missed events. `window-truncated` marks the
+ * run possibly incomplete and never forces a resync; `sync-token-expired` and `cursor-invalid` do trigger Memory's one
+ * resync a day. `since` is the start of the window the source read instead, no more than `GAP_MAX_DAYS` before now.
+ */
+export interface EventsGap {
+  readonly reason: GapReason
+  readonly since: string
+  readonly until?: string
+}
+
 export interface EventsListInput {
   readonly since?: string
   readonly cursor?: string
@@ -144,6 +160,8 @@ export interface EventsListResult {
   readonly cursor: string
   readonly more: boolean
   readonly trust: typeof TRUST
+  /** Present only when the source restarted its window; absent on an ordinary page. */
+  readonly gap?: EventsGap
 }
 
 /** An input after `parseEventsListInput`: `since` in epoch milliseconds, `limit` with its default. */
@@ -199,6 +217,25 @@ export function scopeProblems(scope: unknown, where: string): string[] {
 /** A validated scope, as it is echoed: its keys in the order given, each with its ids. */
 export function copyScope(scope: EventsScope): Record<string, string[]> {
   return Object.fromEntries(Object.entries(scope).map(([key, ids]) => [key, [...ids]]))
+}
+
+/**
+ * A `gap`'s problems, one sentence each; none when it keeps contract 2. `now` is the clock its `since` is measured
+ * against: `since` and `until` are ISO 8601 UTC, `since ≤ until`, and `since` no more than `GAP_MAX_DAYS` before now.
+ */
+export function gapProblems(gap: unknown, now = Date.now()): string[] {
+  if (!plainObject(gap)) return ["the gap must be { reason, since, until? }"]
+  const problems: string[] = []
+  for (const key of Object.keys(gap)) if (!["reason", "since", "until"].includes(key)) problems.push(`the gap has the field "${key}", which the contract does not define`)
+  if (!(GAP_REASONS as readonly unknown[]).includes(gap["reason"])) problems.push(`the gap's reason must be one of ${GAP_REASONS.join(", ")}`)
+  const time = (value: unknown) => (typeof value === "string" && ISO_UTC.test(value) && Number.isFinite(Date.parse(value)) ? Date.parse(value) : undefined)
+  const since = time(gap["since"])
+  if (since === undefined) problems.push("the gap's since must be an ISO 8601 UTC date-time ending in Z")
+  if (gap["until"] !== undefined && time(gap["until"]) === undefined) problems.push("the gap's until must be an ISO 8601 UTC date-time ending in Z")
+  const until = gap["until"] === undefined ? undefined : time(gap["until"])
+  if (since !== undefined && until !== undefined && since > until) problems.push("the gap's since is after its until")
+  if (since !== undefined && since < now - GAP_MAX_DAYS * 86_400_000) problems.push(`the gap's since is more than ${GAP_MAX_DAYS} days before now`)
+  return problems
 }
 
 /** `since` in epoch milliseconds; undefined when it is not one of the accepted forms or not a real time. */
@@ -398,8 +435,8 @@ export interface EventsListIdentity {
   readonly setup: string
 }
 
-/** A result, with its source, account, owner, scope, setup and trust marker. */
-export function eventsListResult(identity: EventsListIdentity, events: readonly SourceEvent[], cursor: string, more: boolean): EventsListResult {
+/** A result, with its source, account, owner, scope, setup, trust marker and, only when it restarted, its gap. */
+export function eventsListResult(identity: EventsListIdentity, events: readonly SourceEvent[], cursor: string, more: boolean, gap?: EventsGap): EventsListResult {
   return {
     source: identity.source,
     account: identity.account,
@@ -410,6 +447,7 @@ export function eventsListResult(identity: EventsListIdentity, events: readonly 
     cursor,
     more,
     trust: TRUST,
+    ...(gap === undefined ? {} : { gap: { ...gap } }),
   }
 }
 
@@ -472,11 +510,11 @@ export function eventProblems(event: unknown, where = "event"): string[] {
   return problems
 }
 
-/** A result's problems: its shape, every event, the order, the limit, the scope and the size. None when it keeps the contract. */
-export function resultProblems(result: unknown, limit: number = PAGE.max): string[] {
+/** A result's problems: its shape, every event, the order, the limit, the scope, the gap and the size. None when it keeps the contract. */
+export function resultProblems(result: unknown, limit: number = PAGE.max, now = Date.now()): string[] {
   if (!plainObject(result)) return ["the result is not an object"]
   const problems: string[] = []
-  const keys = ["source", "account", "owner", "scope", "setup", "events", "cursor", "more", "trust"]
+  const keys = ["source", "account", "owner", "scope", "setup", "events", "cursor", "more", "trust", "gap"]
   for (const key of Object.keys(result)) if (!keys.includes(key)) problems.push(`the result has the field "${key}", which the contract does not define`)
   const { source, account } = result
   const named = line(source, EVENT_LIMITS.source) && SOURCE_PATTERN.test(source)
@@ -487,6 +525,7 @@ export function resultProblems(result: unknown, limit: number = PAGE.max): strin
     problems.push("the result's owner must be { id, label }, two non-empty lines")
   }
   problems.push(...scopeProblems(result["scope"], "the result's scope"))
+  if (result["gap"] !== undefined) problems.push(...gapProblems(result["gap"], now))
   const setup = result["setup"]
   if (typeof setup !== "string" || setup.length > 300 || setup.includes("\n") || setup.includes("\u0000")) problems.push("the result's setup must be one line of at most 300 characters")
   const cursor = result["cursor"]
@@ -584,6 +623,7 @@ export async function eventsListConformance(list: EventsList, fixtures: Conforma
     setups.add(result.setup)
     if (fixtures.owner && JSON.stringify(result.owner) !== JSON.stringify({ id: fixtures.owner.id, label: fixtures.owner.label })) problems.push(`${what}: the owner is not the fixture's owner`)
     if (JSON.stringify(result.scope) !== JSON.stringify(wanted)) problems.push(`${what}: the result echoes the scope ${JSON.stringify(result.scope)}, not ${JSON.stringify(wanted)}`)
+    if (result.gap !== undefined) problems.push(`${what}: the result answered a gap, and this fixture changes nothing`)
     for (const event of result.events) {
       if (event.source !== fixtures.source) problems.push(`${what}: an event names the source ${event.source}, not ${fixtures.source}`)
       if (fixtures.account !== undefined && event.account !== fixtures.account) problems.push(`${what}: an event names the account ${event.account}, not ${fixtures.account}`)

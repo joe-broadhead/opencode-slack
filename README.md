@@ -183,7 +183,8 @@ sign-in is involved.
   confirm in Memory. It reads them with `slack_read_channel` and `slack_read_user_profile`, and a thread job also reads
   `slack_read_thread`, because a channel read lists only the replies Slack also sent to the channel.
 - **The scope is a cap:** a confirmed channel outside `events.channels` is never read. `events.channels` is the list of
-  what this plugin may read at all.
+  what this plugin may read at all. Memory offers the conversations to pick at bind time, with `slack_list_user_channels`,
+  and stores only what you confirm.
 - **Pause it in Memory,** in the console's Sources area; narrow it by removing ids from `events.channels`.
 
 [Memory](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/memory.md) has the declaration, the reads and

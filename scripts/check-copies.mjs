@@ -2,8 +2,8 @@
 //   node scripts/check-copies.mjs          check the copies this plugin has
 //   node scripts/check-copies.mjs --print  print each copy's hash, after a change made in every plugin at once
 // Each plugin keeps its own copy, because each bundle and each test suite stands alone. The hashes below name the one
-// version all plugins carry: the tools RPC outside its PLUGIN-SPECIFIC block, the declaration test kit whole, and the
-// events_list source contract whole (only source plugins carry it).
+// version all plugins carry: the tools RPC outside its PLUGIN-SPECIFIC block, the declaration test kit whole (Memory's
+// published `plugin-kit/` files, vendored), and the events_list source contract whole (only source plugins carry it).
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 
@@ -13,8 +13,11 @@ const END = "// <<< PLUGIN-SPECIFIC <<<"
 const COPIES = [
   { path: "src/host/tools-rpc.ts", optional: true, sha256: "15d82caa53aaae7ad9efb88dddb97056d3895c4dbf49b8efbb85b743871b2a6d", part: sharedPart },
   { path: "test/support/jelly-kit.ts", optional: false, sha256: "ab599abcf041044c77e7938c3d9a081e00072487a7ec20b654d86c8230951190", part: (text) => text },
-  { path: "test/support/memory-kit.ts", optional: true, sha256: "a9232ef30daef1bc982fb33afea1923ccc239c5292d36af51f56762f10d60938", part: (text) => text },
-  { path: "src/host/events-list.ts", optional: true, sha256: "b7211d423aaab43f5346e78baaedcb839cc9362fe5354b1159f776bc370f4118", part: (text) => text },
+  { path: "test/support/memory-kit.mjs", optional: true, sha256: "50d570acf49df758ed0c0abaed1f277188a90652888cc88ed9049036cc9f0993", part: (text) => text },
+  { path: "test/support/conformance.mjs", optional: true, sha256: "76b1c3b3653a1a45c0f39e28e3b97bdb345036e3c8afb39fac0bbfa4b08fdd43", part: (text) => text },
+  { path: "test/support/schema-check.mjs", optional: true, sha256: "4e53cd3e0c792d79bd1ad04be64ffacac5776fde5d3164964027619141260a3c", part: (text) => text },
+  { path: "test/support/memory-plugin.v2.json", optional: true, sha256: "47bc9f5f256032b6377c0b938761c38538cee9f93913e17060138f4855052992", part: (text) => text },
+  { path: "src/host/events-list.ts", optional: true, sha256: "9aa00fdabe67a59712979203f10e86c13bb8ab4fb0a72baadb602b77857f1d80", part: (text) => text },
 ]
 
 function sharedPart(text, path) {

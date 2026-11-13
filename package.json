@@ -342,7 +342,10 @@
           "method": "slack_read_thread",
           "input": {  },
           "grants": [ { "action": "slack_slack_read_thread", "resource": "*" } ],
-          "scopeInputs": { "channel_id": "channels", "message_ts": "thread" },
+          "scopeInputs": {
+            "channel_id": "channels",
+            "message_ts": { "perUnit": "thread_ts", "bind": "channels" }
+          },
           "kinds": [ "message" ],
           "cursor": "cursor",
           "billing": null
@@ -356,16 +359,17 @@
           "pattern": "^[CDGUW][A-Z0-9]{8,12}$",
           "max": 16,
           "required": true,
-          "suggest": true
-        },
-        {
-          "key": "thread",
-          "title": "One thread",
-          "kind": "ids",
-          "pattern": "^[0-9]{9,11}\\.[0-9]{6}$",
-          "max": 1,
-          "required": false,
-          "suggest": false
+          "suggest": true,
+          "suggestBy": {
+            "method": "slack_list_user_channels",
+            "input": {
+              "types": [ "public_channel", "private_channel", "im", "mpim" ],
+              "limit": 200
+            },
+            "grants": [ { "action": "slack_slack_list_user_channels", "resource": "*" } ],
+            "ids": "$.channels[*].id",
+            "labels": "$.channels[*].name"
+          }
         }
       ],
       "billing": null
@@ -395,7 +399,7 @@
         ],
         "cadence": { "everyMinutes": 30 },
         "billing": null,
-        "setup": "Choose the channels and direct messages to collect when you confirm."
+        "setupHint": "Choose the channels and direct messages to collect when you confirm."
       }
     ],
     "templates": [
@@ -406,7 +410,9 @@
         "trigger": {
           "schedule": { "every": "1d" }
         },
-        "extract": [ { "use": "events_list", "connector": "slack.workspace" } ],
+        "extract": {
+          "steps": [ { "use": "events_list", "connector": "slack.workspace", "source": "slack" } ]
+        },
         "transform": { "into": "events" },
         "curate": {
           "stages": [
@@ -420,12 +426,10 @@
                 "window": "1d",
                 "maxUnits": 15
               },
-              "render": {
-                "into": "journal",
-                "heading": "Slack threads",
-                "line": "{title}: {count} messages, {participants} people {cite}",
-                "max": 15
-              }
+              "into": "journal",
+              "heading": "Slack threads",
+              "line": "{title}: {count} messages, {participants} people {cite}",
+              "max": 15
             }
           ]
         },
@@ -438,15 +442,18 @@
         "trigger": {
           "schedule": { "every": "1d" }
         },
-        "extract": [
-          { "use": "events_list", "connector": "slack.workspace" },
-          {
-            "call": "slack_read_thread",
-            "connector": "slack.workspace",
-            "for": "thread",
-            "with": { "limit": 100 }
-          }
-        ],
+        "extract": {
+          "steps": [
+            { "use": "events_list", "connector": "slack.workspace", "source": "slack" },
+            {
+              "call": "slack_read_thread",
+              "connector": "slack.workspace",
+              "for": "thread",
+              "with": { "limit": 100 },
+              "source": "slack"
+            }
+          ]
+        },
         "transform": { "into": "events" },
         "curate": {
           "stages": [
@@ -466,7 +473,7 @@
             }
           ]
         },
-        "outputs": [ "proposal:decision", "proposal:commitment_open", "proposal:commitment_close" ],
+        "outputs": [ "proposal:commitment_close", "proposal:commitment_open", "proposal:decision" ],
         "budget": { "tokensPerRun": 15000 }
       }
     ]

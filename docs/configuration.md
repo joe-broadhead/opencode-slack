@@ -416,7 +416,10 @@ events_list({ since?, cursor?, limit?, account?, source?, scope? })
     never widening it, and every result echoes the scope the call named (`{}` when it named none: the whole source,
     which reads the option). An unknown key is `SCOPE_UNKNOWN`; a value that is not a Slack id, or a list that is
     empty, repeated or over 64, is `INPUT_INVALID`, and so is a repeated id under one key.
-  - **`setup`** is one line on what to change before the source can read anything, empty when nothing is needed.
+  - **`setup`** is one line on what to change before the source can read anything, empty when nothing is needed. The
+    manifest's static counterpart, shown while the source is not yet bound, is `setupHint`.
+  - **`gap`** is present only when a source restarted its window: `{ reason, since, until? }` with
+    `sync-token-expired`, `cursor-invalid` or `window-truncated`. Slack never restarts silently, so it answers none.
 
 - **What it lists**, oldest first: the messages posted in the conversations listed in `events.channels`, read one at a time with `slack_read_channel` and `oldest`. It never uses the private search, never reads a file, and calls nothing that asks under the default rules. A thread's replies are listed only when Slack shows them in the channel (sent to the channel too); a channel read does not include the rest. With no channel enabled, it lists nothing and says so.
 - **Scopes**: the default scopes read public channels only. To list private channels, group messages or direct messages, add `groups:history`, `mpim:history` or `im:history` to `oauth.scopes` and sign in again. Listing a direct message is reading it without a prompt: enabling it in `events.channels` is the consent.

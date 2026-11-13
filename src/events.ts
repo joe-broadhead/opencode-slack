@@ -147,6 +147,16 @@ export const EVENTS_OUTPUT: JsonSchema = {
     cursor: { type: "string", description: "Pass it to the next call. Empty on the owner-only call, which reads no events" },
     more: { type: "boolean", description: "True when another call now would list more" },
     trust: { type: "string", enum: ["untrusted"] },
+    gap: {
+      type: "object",
+      description: "Present only when this source restarted its window; Slack never does, so it answers none",
+      required: ["reason", "since"],
+      properties: {
+        reason: { type: "string", enum: ["sync-token-expired", "cursor-invalid", "window-truncated"] },
+        since: { type: "string", description: "ISO 8601 UTC, the start of the window re-read" },
+        until: { type: "string", description: "ISO 8601 UTC, its end, when it is closed" },
+      },
+    },
     scope: {
       type: "object",
       description: "The scope the call named, echoed: its channels and direct messages. {} is the whole source, which reads the events.channels option",
