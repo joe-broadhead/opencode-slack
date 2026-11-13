@@ -151,6 +151,21 @@ describe("the protocol", () => {
     expect(result["gap"]).toBeUndefined()
   })
 
+  test("the cursor is bound to the plugin, source, account and scope, and a contract 1 cursor is accepted once", async () => {
+    const read2 = async (tool: string, input: Record<string, unknown>) => ({ output: answers(tool, input), text: "" })
+    // The direct message has no unreadable message, so its page carries a cursor (a failed entry would hold it back).
+    const scoped = (await slackEvents(read2, OPTION, { since: SINCE, scope: { channels: [DM] } }, NOW_MS)) as unknown as { cursor: string }
+    expect(scoped.cursor.length).toBeGreaterThan(0)
+    // Another scope, another account: both are refused.
+    await expect(slackEvents(read2, OPTION, { cursor: scoped.cursor, scope: { channels: [PROJECT] } }, NOW_MS)).rejects.toThrow(/^CURSOR_INVALID: /)
+    await expect(slackEvents(read2, OPTION, { cursor: scoped.cursor, account: "T0OTHER0001" }, NOW_MS)).rejects.toThrow(/^ACCOUNT_UNKNOWN: /)
+    // A contract 1 cursor (the family's codec, bound to the source only) is accepted once for the whole source.
+    const { encodeCursor } = await import("../../src/host/events-list.js")
+    const legacy = encodeCursor("slack.messages", { o: "0123456789abcdef", c: { [PROJECT]: "1000000000.000100" } })
+    await expect(slackEvents(read2, OPTION, { cursor: legacy, since: SINCE }, NOW_MS)).rejects.toThrow(/^CURSOR_EXPIRED: /)
+    await expect(slackEvents(read2, OPTION, { cursor: legacy, scope: { channels: [PROJECT] } }, NOW_MS)).rejects.toThrow(/^CURSOR_INVALID: /)
+  })
+
   test("probe answers the account and owner only, and the detail read refuses an unconfirmed channel", async () => {
     const probe = await slackProbe(async (tool, input) => ({ output: answers(tool, input), text: "" }))
     expect(probe).toMatchObject({ plugin: PLUGIN, source: "slack.messages", account: SEED.team, owner: { id: `slack:${SEED.owner.id}`, label: SEED.owner.name } })

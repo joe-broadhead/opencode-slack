@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
 import { SERVER } from "./defaults.js"
 import {
@@ -12,8 +11,6 @@ import {
   type EventsScope,
   type SourceEvent,
   cut,
-  decodeCursor,
-  encodeCursor,
   eventsListResult,
   fitPage,
   makeEvent,
@@ -21,8 +18,9 @@ import {
   startTime,
 } from "./host/events-list.js"
 import { upstreamText, type JsonSchema, type OwnedMethod } from "./host/tools-rpc.js"
-// The package's own screening: a secret in the text, and instruction-shaped text from someone else.
+// The package's own screening (a secret in the text, instruction-shaped text from someone else) and its bound cursor.
 import { screenEvents } from "../vendor/source-contract/events.js"
+import { decodeBoundCursor, encodeBoundCursor, type CursorBinding } from "../vendor/source-contract/cursor.js"
 import type { Status } from "./status.js"
 
 /**
@@ -513,15 +511,18 @@ async function channelMessages(read: Read, channel: string, after: bigint, now: 
   throw tooMany(channel)
 }
 
-/** The account and owner a cursor belongs to, as 16 hex digits: a cursor from another workspace or sign-in is refused. */
-const bindingOf = (account: string, owner: EventsOwner) => createHash("sha256").update(`${account}\u0000${owner.id}`).digest("hex").slice(0, 16)
+/** What a cursor is bound to, as contract version 1 defines it: this plugin, this source, the account and the scope. */
+const bindingOf = (account: string, scope: EventsScope | undefined): CursorBinding => ({ plugin: PLUGIN_NAME, source: SLACK_SOURCE, account, ...(scope === undefined ? {} : { scope }) })
 
-function boundsOf(cursor: string, binding: string): Map<string, bigint> {
-  const state = decodeCursor(SLACK_SOURCE, cursor)
-  const bounds = record(state?.["c"])
-  const entries = Object.entries(bounds)
-  if (state?.["o"] !== binding || entries.some(([channel, ts]) => !CHANNEL_ID.test(channel) || typeof ts !== "string" || !TS.test(ts))) {
-    throw eventsError("CURSOR_INVALID", "The cursor was not issued by events_list for this Slack workspace and sign-in.", "Call events_list without a cursor, with since, to start again.")
+/**
+ * The cursor's per-channel bounds. A cursor of another plugin, source, account or scope is `CURSOR_INVALID`; a contract 1
+ * cursor is accepted once, for the whole source, so a collector already holding one resumes rather than restarting.
+ */
+function boundsOf(cursor: string, binding: CursorBinding): Map<string, bigint> {
+  const decoded = decodeBoundCursor(binding, cursor, { acceptV1: true })
+  const entries = decoded.ok ? Object.entries(record(decoded.state["c"])) : []
+  if (!decoded.ok || entries.some(([channel, ts]) => !CHANNEL_ID.test(channel) || typeof ts !== "string" || !TS.test(ts))) {
+    throw eventsError("CURSOR_INVALID", "The cursor was not issued by events_list for this Slack workspace, sign-in and scope.", "Call events_list without a cursor, with since, to start again.")
   }
   return new Map(entries.map(([channel, ts]) => [channel, micros(ts as string)]))
 }
@@ -547,7 +548,7 @@ export async function slackEvents(read: Read, optionChannels: readonly string[],
   // The scope a result echoes is the one the call named, as contract 2 requires: `{}` is the whole source (the plugin's
   // own `events.channels` cap), and a call that names channels echoes those, never more.
   const identity = { source: SLACK_SOURCE, account, owner: profile.owner, scope: copyScope(request.scope ?? {}), setup: setupLine(channels, optionChannels) }
-  const binding = bindingOf(account, profile.owner)
+  const binding = bindingOf(account, request.scope)
   const page = (result: EventsListResult, extra: { refused?: RefusedEvent[]; failed?: FailedEvent[]; gap?: EventsListResult["gap"] } = {}) => ({
     plugin: PLUGIN_NAME,
     ...result,
@@ -557,7 +558,7 @@ export async function slackEvents(read: Read, optionChannels: readonly string[],
   })
   if (request.limit === 0) {
     // The owner-only call reads no channel. Its cursor is the empty listing's, so a later call with it starts at since.
-    return page(eventsListResult(identity, [], encodeCursor(SLACK_SOURCE, { o: binding, c: {} }), false))
+    return page(eventsListResult(identity, [], encodeBoundCursor(binding, { c: {} }), false))
   }
   const known = request.cursor === undefined ? new Map<string, bigint>() : boundsOf(request.cursor, binding)
   // History older than the retention window is gone: the consumer gets `gap`, not a silent shortpage (contract 1's rule).
@@ -597,7 +598,7 @@ export async function slackEvents(read: Read, optionChannels: readonly string[],
   const keptEvents = screened.events.slice(0, kept) as SourceEvent[]
   for (const item of listed) if (keptEvents.includes(item.event)) bounds.set(item.channel, item.at)
   // A retryable drop holds the cursor back: the consumer must retry the same window, not skip past it.
-  const cursor = failed.length > 0 ? "" : encodeCursor(SLACK_SOURCE, { o: binding, c: Object.fromEntries([...bounds].map(([channel, at]) => [channel, tsOf(at)])) })
+  const cursor = failed.length > 0 ? "" : encodeBoundCursor(binding, { c: Object.fromEntries([...bounds].map(([channel, at]) => [channel, tsOf(at)])) })
   return page(eventsListResult(identity, keptEvents, cursor, more || kept < screened.events.length), { refused, failed })
 }
 
