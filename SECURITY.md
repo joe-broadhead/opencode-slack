@@ -27,7 +27,13 @@ OpenCode does everything else. It connects to Slack over HTTPS, runs the OAuth s
 
 The client ID is public. A client secret is needed only for apps without PKCE. Give it in the `/connect` **Slack app client ID** entry, where OpenCode stores it in its credential store (the field is not masked while you type), or through `{env:NAME}` in the options; never as text in a config file. Status reports only that a secret is set, never its value.
 
-`oauth.auth_server_metadata_url` points OpenCode's token exchange at another server: OpenCode sends the authorization code and every refresh token to the `token_endpoint` of that metadata document, so that server receives the Slack tokens. Set it only to your host's own sign-in service.
+`oauth.auth_server_metadata_url` replaces Slack's authorization server for the whole sign-in. OpenCode fetches that document and uses it in place of Slack's own metadata:
+
+- its `authorization_endpoint` is the page the person's browser is sent to for the sign-in;
+- its `token_endpoint` receives the authorization code, the PKCE verifier, every refresh token, and the client secret if one is set;
+- its `issuer` is accepted unchecked. OpenCode stamps the stored credentials with it, so a different issuer discards the Slack sign-in already stored, and when the document advertises the `iss` callback parameter (RFC 9207), each sign-in callback is checked against it.
+
+Whoever serves that document therefore controls the Slack sign-in and receives the person's Slack tokens. Only the owner of the OpenCode configuration can set the option, and it must point at your host's own sign-in service, serving a copy of Slack's metadata that changes only `token_endpoint` (see [Refresh behind a hosted callback](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#refresh-behind-a-hosted-callback)).
 
 ### Data flow
 
