@@ -94,6 +94,7 @@ A refusal or failure is the RPC error `failed`, with a message `CODE: what happe
 | `SERVER_CONFLICT` | Your OpenCode config defines its own server named `slack`, which this plugin does not manage (`SERVER_NAME_IN_USE` in `/slack-status`). Remove `mcp.servers.slack` from your OpenCode config. |
 | `CLIENT_ID_MISSING`, `CLIENT_ID_INVALID` | No Slack app client ID is set, or the one saved in `/connect` is empty or has spaces, so the plugin added no Slack server. The next step is the one `/slack-status` gives: run `/connect`, choose **Slack app client ID** and paste the client ID. A client ID saved in `/connect` applies to the next call. `describe` gives the same code as each method's `reason`. |
 | `AUTH_REQUIRED`, `CONNECTING`, `CONNECTION_FAILED`, `DISABLED`, `NOT_REGISTERED` | The Slack server needs a sign-in, is still connecting (also when it reconnected during the call), could not connect, is disabled, or is not registered although a client ID is set. `/slack-status` gives the details. |
+| `OPERATION_UNKNOWN` | A plugin-owned method could not resolve the resource it reads from its input. This plugin's methods resolve none: each is an MCP tool the server scopes, so it cannot occur here. |
 | `UPSTREAM_ERROR` | Slack answered with an error, such as a missing scope or an invalid input. The message holds the first line of Slack's text, at most 300 characters, with tokens and URL query strings removed. |
 | `CANCELLED` | The request was cancelled. |
 

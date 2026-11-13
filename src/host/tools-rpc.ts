@@ -8,7 +8,11 @@
  * A script runs as a session and the agent it names. The rules that decide are the agent's, then the session's, with
  * the host's own order (the last matching rule wins), which is also the order the model path uses:
  * - the rule for the method's permission action is resolved BEFORE dispatch; only `allow` runs, so an `ask` is refused
- *   with no prompt and no tool call, and a `deny` is refused with no tool call;
+ *   with no prompt and no tool call, and a `deny` is refused with no tool call. **When the action takes a resource**
+ *   (a plugin method such as `gws.read` on `<account>:<operation>`), the method may declare a resource resolver; the
+ *   pre-dispatch check evaluates the rule on the resource it returns, so a session that allows one operation does not
+ *   allow every operation of the action. A method without a resolver keeps `*`; a resolver that cannot name the
+ *   resource refuses rather than falling back to `*`;
  * - an MCP method then runs through OpenCode's own executor from `ctx.tool.list()`, which checks `<server>_<tool>`
  *   against the agent's rules, the session's rules and saved approvals, and sends OpenCode's own credential;
  * - a plugin-owned method runs its own spec, with its own `ctx.permission.assert` calls;
@@ -137,6 +141,14 @@ export interface PluginMethod {
   /** The input's JSON Schema, for the contract and describe. OpenCode does not check it: `run` checks its own input. */
   readonly input: JsonSchema
   readonly output: JsonSchema
+  /**
+   * The resource this method's action resolves on, when the action takes one (`gws.read` on `<account>:<operation>`).
+   * The pre-dispatch check evaluates the action on this resource, exactly as the run's own assert will build it, so a
+   * session that allows one operation does not allow every operation of that action. It throws the coded refusal, or
+   * returns `null`, when the input names no account or no operation, or an unknown one; `null` is refused too and never
+   * falls back to `*`. A method whose action is `*` leaves the resolver out and keeps that behaviour.
+   */
+  resource?(input: unknown): string | null
   run(input: unknown, call: ToolCall): Promise<unknown>
   /**
    * Whether the method can run now, for describe only: undefined when it can, otherwise the plugin's own code for why
@@ -392,11 +404,15 @@ const wildcard = (pattern: string, value: string) =>
   new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`).test(value)
 
 /**
- * The host's evaluation for one action on resource `*`: the last matching rule wins, and no match asks. This is the
- * whole of the resolve-before-dispatch rule; `hidden` is the same predicate, under its model-path name.
+ * The host's evaluation for one action on one resource: the last matching rule wins, and no match asks. A rule's
+ * resource pattern may use the host's wildcards, so `*` matches every resource. This is the whole of the
+ * resolve-before-dispatch rule; `hidden` is the same predicate on `*`, under its model-path name.
  */
-export const evaluate = (rules: readonly Rule[], action: string): Rule["effect"] =>
-  rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, "*"))?.effect ?? "ask"
+export const evaluateResource = (rules: readonly Rule[], action: string, resource: string): Rule["effect"] =>
+  rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, resource))?.effect ?? "ask"
+
+/** The host's evaluation for one action on resource `*`: what hides a tool from the model. */
+export const evaluate = (rules: readonly Rule[], action: string): Rule["effect"] => evaluateResource(rules, action, "*")
 
 /** OpenCode hides a tool from the model when the last rule matching its action on `*` is a deny. */
 export const hidden = (rules: readonly Rule[], action: string) => evaluate(rules, action) === "deny"
@@ -567,24 +583,29 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
 
   /**
    * The resolve before dispatch: only `allow` runs. An `ask` is refused because no one can answer it, and a `deny`
-   * because a rule refuses it. Both refuse with no tool call and no prompt.
+   * because a rule refuses it. Both refuse with no tool call and no prompt. `resource` is the method's own resource
+   * when its action takes one (`<account>:<operation>`), and `*` otherwise; the message names it, so a refusal says
+   * which operation was outside the session's rules.
    */
-  const resolve = (rules: readonly Rule[], action: string, agent: string) => {
-    const effect = evaluate(rules, action)
+  const resolve = (rules: readonly Rule[], action: string, agent: string, resource = "*") => {
+    const effect = evaluateResource(rules, action, resource)
     if (effect === "allow") return
+    const named = resource === "*" ? action : `${action} on ${resource}`
     if (effect === "ask")
       throw new ScriptError({
         code: "PERMISSION_DENIED",
-        what: `${action} would ask for this session's agent, and a script cannot answer`,
-        next: `Add an allow rule for ${action} to the session's agent or to the session, or use a session whose agent allows it.`,
+        what: `${named} would ask for this session's agent, and a script cannot answer`,
+        next: `Add an allow rule for ${named} to the session's agent or to the session, or use a session whose agent allows it.`,
       })
-    if (hidden(rules, action)) throw new ScriptError({ code: "PERMISSION_DENIED", what: `${action} is hidden from this session's agent by a deny rule`, next: denyNext(action, agent) })
-    throw new ScriptError({ code: "PERMISSION_DENIED", what: `${action} is denied for this session's agent`, next: denyNext(action, agent) })
+    if (hidden(rules, action)) throw new ScriptError({ code: "PERMISSION_DENIED", what: `${named} is hidden from this session's agent by a deny rule`, next: denyNext(named, agent) })
+    throw new ScriptError({ code: "PERMISSION_DENIED", what: `${named} is denied for this session's agent`, next: denyNext(named, agent) })
   }
 
   /** A method's call: how it runs as the session, and the call it runs with. */
   interface Target {
     readonly action: string
+    /** The method's own resource when its action takes one; undefined for `*`. */
+    readonly resource?: string
     readonly method: MethodSpec
     run(call: ToolCall): Promise<unknown>
   }
@@ -613,12 +634,13 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     },
   })
 
-  const pluginTarget = (method: PluginMethod, envelope: Envelope, action: string): Target => {
+  const pluginTarget = (method: PluginMethod, envelope: Envelope, action: string, resource?: string): Target => {
     // With per-account servers, an unknown account is ACCOUNT_UNKNOWN before the spec runs, as for an MCP method.
     if (accounts) serverOf(envelope.account)
     const account = accounts && envelope.account !== undefined ? { account: envelope.account } : {}
     return {
       action,
+      ...(resource === undefined ? {} : { resource }),
       method,
       run: async (call) => (await method.run(envelope.input, { ...call, ...account })) ?? null,
     }
@@ -626,7 +648,19 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
 
   const targetOf = (method: MethodSpec, envelope: Envelope): Target => {
     const action = actionOf(method, envelope)
-    if (method.kind === "plugin") return pluginTarget(method, envelope, action)
+    if (method.kind === "plugin") {
+      // A method whose action takes a resource resolves it before dispatch, exactly as its run's own assert will. A
+      // coded refusal or a `null` (no account, no operation, an unknown one) stops the call before anything runs.
+      const resource = method.resource?.(envelope.input)
+      if (resource === null) {
+        throw new ScriptError({
+          code: "OPERATION_UNKNOWN",
+          what: `${method.name} could not resolve the ${action} resource from its input`,
+          next: `Name the account and the operation the method reads, and retry.`,
+        })
+      }
+      return pluginTarget(method, envelope, action, resource)
+    }
     return mcpTarget(method, envelope, action, serverOf(envelope.account))
   }
 
@@ -640,7 +674,7 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
       target = targetOf(method, envelope)
       const resolved = await session(envelope.sessionID)
       agent = resolved.agent
-      resolve(resolved.rules, target.action, agent)
+      resolve(resolved.rules, target.action, agent, target.resource)
       id = `script:${randomUUID()}`
       const call: ToolCall = {
         sessionID: envelope.sessionID,

@@ -28,7 +28,7 @@ export function recordingSession(grants, tools, actionOf = (id) => id) {
         assertions.push({ action: input.action, resources })
         const ok = [...held].some((entry) => {
           const [action, allowed] = entry.split("\u0000")
-          const hit = wildcard(allowed, resource) && wildcard(action, input.action)
+          const hit = sameResource(allowed, resource) && wildcard(action, input.action)
           if (hit) asserted.add(entry)
           return hit
         })
@@ -44,12 +44,30 @@ export function recordingSession(grants, tools, actionOf = (id) => id) {
       id: tool.id,
       execute: async (input, context) => {
         calls.push(tool.id)
-        await tool.execute(input, { ...context, permission })
+        return await tool.execute(input, { ...context, permission })
       },
     }))
-  /** The grants the fixture never asserted: declared but unused, so the declaration over-grants. */
-  const unused = () => grants.filter((grant) => !asserted.has(key(grant.action, grant.resource)))
+  /**
+   * The grants the fixture never asserted: declared but unused, so the declaration over-grants. A declared resource
+   * with `{account}` matches the concrete account the fixture asserted, and every resource of a call counts.
+   */
+  const unused = () => grants.filter((grant) => !assertionMatches(assertions, grant))
   return { assertions, calls, undeclared, unused, permission, tool: { list }, actionOf }
+}
+
+/** True when some assertion is the grant's action on one of its resources, with `{account}` bound to any account. */
+export function assertionMatches(assertions, grant) {
+  return assertions.some((assertion) => assertion.action === grant.action
+    && (assertion.resources ?? ["*"]).some((resource) => sameResource(grant.resource, resource)))
+}
+
+/** `{account}` is a wildcard for the account a call names; everything else must match exactly, or by `*`. */
+export function sameResource(declared, asserted) {
+  if (declared === asserted || declared === "*") return true
+  if (String(declared).startsWith("{account}:")) {
+    return wildcard(String(declared).slice("{account}:".length), String(asserted).replace(/^[^:]*:/, ""))
+  }
+  return wildcard(String(declared), String(asserted))
 }
 
 const wildcard = (pattern, value) => {
@@ -69,17 +87,6 @@ const iso = (value) => typeof value === "string" && !Number.isNaN(Date.parse(val
  */
 export async function eventsListConformance({ list, declared, grants, assertions }, fixtures = []) {
   const problems = []
-  // "Exactly what it asserts": a declared grant the call never asserted is over-granting, and an asserted action the
-  // declaration lacks is an outage. `assertions` is `recordingSession(...).assertions` from the same run.
-  if (Array.isArray(grants) && Array.isArray(assertions)) {
-    const declaredSet = new Set(grants.map((grant) => key(grant.action, grant.resource)))
-    const assertedSet = new Set(assertions.map((assertion) => key(assertion.action, (assertion.resources ?? ["*"])[0])))
-    for (const entry of declaredSet) {
-      if (![...assertedSet].some((seen) => wildcard(entry.split("\u0000")[1], seen.split("\u0000")[1]) && wildcard(entry.split("\u0000")[0], seen.split("\u0000")[0]))) {
-        problems.push(`the declaration grants ${entry.split("\u0000")[0]}, which the call never asserts: a source's grants are exactly what it asserts`)
-      }
-    }
-  }
   const check = (answer, where) => {
     if (!isPlain(answer)) { problems.push(`${where}: the answer is not an object`); return }
     if (answer.source !== declared.id) problems.push(`${where}: source is ${JSON.stringify(answer.source)}, not ${declared.id}`)
@@ -140,6 +147,15 @@ export async function eventsListConformance({ list, declared, grants, assertions
     if (fixture.expect === "empty" && answer.events.length !== 0) problems.push(`${where}: it must list nothing`)
     if (fixture.input?.scope && JSON.stringify(answer.scope) !== JSON.stringify(fixture.input.scope)) {
       problems.push(`${where}: the answer's scope must echo the call's scope`)
+    }
+  }
+  // "Exactly what it asserts", after every call: a declared grant no call asserted is over-granting. The assertion
+  // list covers the owner-only call and every fixture call; `{account}` is bound, and every resource counts.
+  if (Array.isArray(grants) && Array.isArray(assertions)) {
+    for (const grant of grants) {
+      if (!assertionMatches(assertions, grant)) {
+        problems.push(`the declaration grants ${grant.action} on ${grant.resource}, which no call asserts: a source's grants are exactly what it asserts`)
+      }
     }
   }
   return problems

@@ -287,6 +287,17 @@ function scopeInputProblems(inputs, where, keys) {
       else binds.add(value.bind)
     } else p.push(`${where}.${field} must be a scope key or { perUnit, bind }`)
   }
+  // §9.1 C: a thread_ts is meaningless without its channel, so both are perUnit inputs on the same confirmed key.
+  const perUnitFields = Object.entries(inputs).filter(([, value]) => plain(value) && typeof value.perUnit === "string")
+  const ts = perUnitFields.find(([, value]) => value.perUnit === "thread_ts")
+  if (ts) {
+    const channel = perUnitFields.find(([, value]) => value.perUnit === "thread_channel" && value.bind === ts[1].bind)
+    if (!channel) {
+      p.push(`${where}.${ts[0]}: a thread_ts needs a thread_channel input on the same bind, so the thread's channel is pinned to the confirmed scope`)
+    } else if (!keys.includes(ts[1].bind)) {
+      p.push(`${where}.${ts[0]}: the thread's channel must be pinned to a confirmed scope key, and ${String(ts[1].bind)} is not one`)
+    }
+  }
   // §9.1 C: a read is pinned by a binding-key input, or by perUnit inputs that all agree on one bind.
   if (binds.size > 1) p.push(`${where} binds per-unit inputs to ${[...binds].join(", ")}: they must all name one scope key`)
   if (bound === 0 && binds.size === 0) p.push(`${where} pins no binding-key input, so the read is not scoped to what the person confirmed`)
