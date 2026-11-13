@@ -1,7 +1,8 @@
-// Slack's part of the tools RPC v2: the plugin-specific block of src/host/tools-rpc.ts, and how setup registers it.
+// Slack's part of the tools RPC v2.3: its ToolsRpcPlugin value in src/host/tools-rpc.ts, and how setup registers it.
 // The shared part is tested in tools-rpc.test.ts; the resolve matrix in resolve.test.ts.
 import { afterEach, describe, expect, test } from "bun:test"
-import { CLASSES, METHODS, NEXT_STEPS, shapeInput, shapeResult, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
+import { METHODS, NEXT_STEPS, shapeInput, shapeResult, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
+import { CLASSES } from "../../vendor/source-contract/tools-rpc.js"
 import plugin from "../../src/index.js"
 import { defaultRules, type Rule } from "../../src/permissions.js"
 import { classify, KNOWN_TOOLS, READ_TOOLS, SEND_TOOLS } from "../../src/tools.js"

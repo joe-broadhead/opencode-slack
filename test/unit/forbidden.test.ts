@@ -20,8 +20,9 @@ interface Rule {
 /**
  * The one allowed permission hook: the tools RPC's `evaluate` hook. No one is there to answer a script's prompt, so it
  * turns an ask on one of the RPC's own calls in flight into a deny. It only tightens, and leaves every other call alone.
+ * It lives in the vendored package's transport, which this plugin's `src/host/tools-rpc.ts` only parameterises.
  */
-const EVALUATE_HOOK_FILE = "src/host/tools-rpc.ts"
+const EVALUATE_HOOK_FILE = "vendor/source-contract/tools-rpc.js"
 
 const RULES: readonly Rule[] = [
   { name: "ctx.mcp.catalog", pattern: /mcp\.catalog/, example: "await ctx.mcp.catalog()" },
@@ -53,12 +54,7 @@ const RULES: readonly Rule[] = [
   { name: "ctx.generate.text", pattern: /generate\.text/, example: "await ctx.generate.text(prompt)" },
   { name: "experimental.policies", pattern: /experimental\.policies/, example: "experimental.policies.push(policy)" },
   { name: "ctx.experimental.artifact", pattern: /\bexperimental\s*\??\.\s*artifact\b/, example: "await ctx.experimental?.artifact.create(file)" },
-  {
-    name: "ctx.permission.hook",
-    pattern: /permission\.hook/,
-    example: "ctx.permission.hook(escalate)",
-    except: { [EVALUATE_HOOK_FILE]: "the tools RPC's one evaluate hook, which only turns an ask on its own script calls in flight into a deny" },
-  },
+  { name: "ctx.permission.hook", pattern: /permission\.hook/, example: "ctx.permission.hook(escalate)" },
   { name: "@opencode-ai/plugin", pattern: /@opencode-ai\/plugin/, example: "import { tool } from \"@opencode-ai/plugin\"" },
   { name: "@opencode/ai imports", pattern: /(["'`])@opencode\/ai(?:\/[^"'`\s]*)?\1/, example: "import { generate } from \"@opencode/ai/provider\"" },
   { name: "a server() export", pattern: /\bexport\s+(?:async\s+)?(?:function|const|let)\s+server\b/, example: "export async function server(input) {}" },
