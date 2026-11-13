@@ -9,6 +9,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - Status's `account` (`teamId`, `userId`, `enterpriseId`), from `auth.test`. Thanks to @domeevans (#18).
 - The tools RPC's `status` method (`slack_status`, allowed at every `access`). Thanks to @domeevans (#18).
 - `slack_mark_read` / `mark_read` (write): Slack's `conversations.mark`. Needs a `:write` scope; `SCOPE_MISSING` without it. Thanks to @domeevans (#18).
+- The `oauth.auth_server_metadata_url` option, passed unchanged into the `slack` server's `oauth` block, so a host whose sign-ins return to an `https:` callback can keep Slack's client secret on its own sign-in service: OpenCode reads that metadata document and sends every token exchange and refresh to its `token_endpoint`. It must be an `https:` URL of at most 2048 characters with no user name, password or fragment. Without it the entry is unchanged.
+- The README and `docs/configuration.md` say that Slack refreshes without a client secret only for desktop redirects, and that behind a hosted callback it refuses the refresh with `bad_client_secret` in an HTTP 200 answer.
 
 ### Changed
 

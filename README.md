@@ -159,7 +159,7 @@ Do not put this block in the top-level `permissions`. OpenCode adds top-level ru
 
 ## Configure
 
-Everything works without options. Options set the client ID for everyone (instead of `/connect`), the callback URL and its local port, the scopes, a client secret for apps without PKCE, the host check, and the channels `slack_events_list` reads for Memory (`"events": { "channels": ["C0123ABCD45"] }`). To pass them, use the object form of the `plugins` entry:
+Everything works without options. Options set the client ID for everyone (instead of `/connect`), the callback URL and its local port, the scopes, a client secret for apps without PKCE, the OAuth metadata address of a host's own sign-in service, the host check, and the channels `slack_events_list` reads for Memory (`"events": { "channels": ["C0123ABCD45"] }`). To pass them, use the object form of the `plugins` entry:
 
 ```jsonc
 {
@@ -176,6 +176,8 @@ Everything works without options. Options set the client ID for everyone (instea
 ```
 
 Add the address to the Slack app's **OAuth & Permissions → Redirect URLs** (or `oauth_config.redirect_urls` in the [manifest](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/slack-app-manifest.json)). Slack matches the host and port exactly. [The callback: loopback or hosted](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#the-callback-loopback-or-hosted) explains the proxy and how two sign-ins on one machine avoid colliding on port 8765.
+
+**Refresh behind a hosted callback.** Slack refreshes a PKCE app's token without a client secret only for a desktop redirect: `localhost` (with PKCE on) or a custom URI scheme. An `https:` callback is a server redirect, so every refresh must carry the client secret, and the sign-in stops working when the token ends after 12 hours. Either give OpenCode the secret (`oauth.client_secret`), or set `oauth.auth_server_metadata_url` to your host's own sign-in service, whose token endpoint adds the secret on its server; the plugin passes it to OpenCode unchanged, and OpenCode then sends every token exchange and refresh there. [Refresh behind a hosted callback](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#refresh-behind-a-hosted-callback) has the details.
 
 [docs/configuration.md](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md) lists every option, the scopes each tool needs, the permission rules and the status model.
 
@@ -248,6 +250,8 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 - **Missing scope (`missing_scope`):** add the scope to the app and to `oauth.scopes`, then run `opencode mcp logout slack` and sign in again. See the [scope table](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#scopes).
 - **Rate limited:** Slack limits each tool separately. Wait, then make fewer calls.
 - **You declined a prompt:** nothing was sent. In Code Mode, the decline appears to the agent as an error inside its program.
+
+**Asked to sign in again every 12 hours, behind a hosted callback.** Slack refused the refresh with `bad_client_secret`. It answers with HTTP 200, so OpenCode's log shows the refresh request as succeeded and then the server as failed. See [Refresh behind a hosted callback](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#refresh-behind-a-hosted-callback).
 
 **Asked to sign in again after about 30 days.** Slack expires the refresh tokens it issues to PKCE apps after 30 days. Run `/connect` and choose **Slack** again, then press `o` or Enter.
 

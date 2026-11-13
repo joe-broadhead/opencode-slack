@@ -27,6 +27,8 @@ OpenCode does everything else. It connects to Slack over HTTPS, runs the OAuth s
 
 The client ID is public. A client secret is needed only for apps without PKCE. Give it in the `/connect` **Slack app client ID** entry, where OpenCode stores it in its credential store (the field is not masked while you type), or through `{env:NAME}` in the options; never as text in a config file. Status reports only that a secret is set, never its value.
 
+`oauth.auth_server_metadata_url` points OpenCode's token exchange at another server: OpenCode sends the authorization code and every refresh token to the `token_endpoint` of that metadata document, so that server receives the Slack tokens. Set it only to your host's own sign-in service.
+
 ### Data flow
 
 - **To Slack:** each tool call with the arguments the agent chose, sent with your Slack user token; and the plugin's own `auth.test` and `conversations.mark` requests, also with your token. OpenCode also sends the session ID in the call's `_meta["ai.opencode/sessionID"]` field. The session ID is an opaque correlation value, not a credential, and Slack may log or keep it.
