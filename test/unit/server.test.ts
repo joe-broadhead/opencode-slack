@@ -66,6 +66,28 @@ describe("serverConfig", () => {
     expect(oauthKeys(serverConfig(PUBLIC, C1))).not.toContain("callback_port")
   })
 
+  test("a metadata address is passed into oauth unchanged, and nothing else changes", () => {
+    const url = "https://ID.Host.Example:8443/slack/metadata?tenant=a"
+    const config = serverConfig(options({ oauth: { auth_server_metadata_url: url } }), { ...C1, secret: "shh" })
+    expect(config).toStrictEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: {
+        client_id: "C1",
+        redirect_uri: "http://localhost:8765/callback",
+        scope: "channels:history channels:read search:read.public users:read",
+        client_secret: "shh",
+        auth_server_metadata_url: url,
+      },
+    })
+  })
+
+  test("without a metadata address the oauth block has no such key", () => {
+    const oauthKeys = (config: ReturnType<typeof serverConfig>) => Object.keys((config as { oauth: object }).oauth)
+    expect(oauthKeys(serverConfig(PUBLIC, C1))).not.toContain("auth_server_metadata_url")
+    expect(oauthKeys(serverConfig(PUBLIC, { ...C1, secret: "s" }))).not.toContain("auth_server_metadata_url")
+  })
+
   test("leaves protocol, timeouts, headers and Code Mode to the host", () => {
     expect(Object.keys(serverConfig(PUBLIC, { ...C1, secret: "s" })).sort()).toEqual(["oauth", "type", "url"])
   })

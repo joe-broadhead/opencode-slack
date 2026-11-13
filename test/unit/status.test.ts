@@ -51,13 +51,13 @@ const STATES: readonly (readonly [string, StatusInput, Pick<Status, "state" | "c
     state: "not_configured",
     code: "OPTIONS_INVALID",
     message: "Option oauth.bogus: This option is not supported.",
-    nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
+    nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret, auth_server_metadata_url.",
   }],
   ["invalid options", input({ parsed: INVALID, active: false }), {
     state: "not_configured",
     code: "OPTIONS_INVALID",
     message: "Option oauth.bogus: This option is not supported.",
-    nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
+    nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret, auth_server_metadata_url.",
   }],
   ["no client ID", input({ client: { invalid: false } }), {
     state: "not_configured",
@@ -141,7 +141,7 @@ describe("buildStatus states", () => {
       state: "not_configured",
       code: "OPTIONS_INVALID",
       message: "Option oauth.bogus: This option is not supported.",
-      nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
+      nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret, auth_server_metadata_url.",
       host: { version: "2.3.0", range: ">=2.2.3 <2.3.0", tested: false },
     })
     expect(formatStatus(status)).not.toContain("allowUntestedHost")

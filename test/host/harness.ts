@@ -67,8 +67,15 @@ const rule = (effect: Rule["effect"]) => (action: string): Rule => ({ action, re
 const allow = rule("allow")
 const deny = rule("deny")
 
-/** The https redirect and listener port the "hosted" project sets. */
-export const HOSTED_OAUTH = { redirect_uri: "https://host.example/oauth/return", callback_port: 49231 } as const
+/**
+ * The https redirect, listener port and OAuth metadata address the "hosted" project sets. The host decodes the entry
+ * the plugin sets with its MCP schema, which drops keys it does not know, so reading the entry back proves it keeps them.
+ */
+export const HOSTED_OAUTH = {
+  redirect_uri: "https://host.example/oauth/return",
+  callback_port: 49231,
+  auth_server_metadata_url: "https://id.host.example/.well-known/oauth-authorization-server",
+} as const
 
 /** The project skill the "shadowed" project holds under the bundled skill's id. */
 export const SHADOWING_SKILL = join("projects", "shadowed", ".opencode", "skills", "slack-search", "SKILL.md")

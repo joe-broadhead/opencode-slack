@@ -134,6 +134,24 @@ describe("setup with a client ID in the options", () => {
     expect(await host.status()).toMatchObject({ callback: "https://host.example/oauth/return", callbackPort: 49200 })
   })
 
+  test("a metadata address reaches the server's oauth block unchanged, with a /connect client too", async () => {
+    const url = "https://id.host.example/.well-known/oauth-authorization-server"
+    const host = await setUp({ options: { oauth: { client_id: "C1", redirect_uri: "https://host.example/oauth/return", callback_port: 49200, auth_server_metadata_url: url } } })
+    expect(host.servers.get("slack")).toStrictEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: {
+        client_id: "C1",
+        redirect_uri: "https://host.example/oauth/return",
+        callback_port: 49200,
+        scope: "channels:history channels:read search:read.public users:read",
+        auth_server_metadata_url: url,
+      },
+    })
+    const connect = await setUp({ options: { oauth: { auth_server_metadata_url: url } }, credentials: { "slack-app": stored("C2") } })
+    expect((connect.servers.get("slack") as { oauth: Record<string, unknown> }).oauth.auth_server_metadata_url).toBe(url)
+  })
+
   test("names the Slack server's integration Slack in /connect", async () => {
     const host = await setUp()
     await until(() => host.integrations.get("mcp_slack")?.name === "Slack")
@@ -323,6 +341,7 @@ describe("setup that registers only the status surfaces", () => {
   test.each([
     ["an unknown option", { oauth: { client_id: "C1", bogus: 1 } }, "oauth.bogus"],
     ["a secret without a client ID", { oauth: { client_secret: "s" } }, "oauth.client_secret"],
+    ["an http metadata address", { oauth: { client_id: "C1", auth_server_metadata_url: "http://host.example/m" } }, "oauth.auth_server_metadata_url"],
     ["a bad server name", { oauth: { client_id: "C1" }, server: "a.b" }, "server"],
     ["options that are not an object", "slack", "options"],
   ])("invalid options: %s", async (_label, options, field) => {
