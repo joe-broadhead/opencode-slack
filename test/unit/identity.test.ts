@@ -1,7 +1,7 @@
 // Who is signed in: Slack's auth.test, read once per credential through the Web API client, for status. Every id below
 // is invented.
 import { describe, expect, test } from "bun:test"
-import { identityOf, workspaceIdentity } from "../../src/identity.js"
+import { identityOf, STATUS_WAIT_MS, workspaceIdentity } from "../../src/identity.js"
 import type { SlackApi, SlackApiResult } from "../../src/slack-api.js"
 
 const AUTH_TEST = { ok: true, url: "https://acme.slack.com/", team: "Acme", user: "sam", team_id: "T0TEAM0001", user_id: "U0USER0001", is_enterprise_install: false }
@@ -45,6 +45,22 @@ describe("identityOf", () => {
 })
 
 describe("workspaceIdentity", () => {
+  test("with a wait, answers without the identity while Slack is slow, and has it once Slack answers", async () => {
+    let answer!: (result: SlackApiResult) => void
+    const pending = new Promise<SlackApiResult>((resolve) => { answer = resolve })
+    const calls: string[] = []
+    const identity = workspaceIdentity({ credential: async () => "crd_one", call: (method) => { calls.push(method); return pending } })
+    expect(await identity.get(10)).toBeUndefined()
+    expect(await identity.get(10)).toBeUndefined()
+    answer({ ok: true, credential: "crd_one", body: AUTH_TEST })
+    expect(await identity.get(10)).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001" })
+    expect(calls).toEqual(["auth.test"])
+  })
+
+  test("status waits about 2 s, not auth.test's 10 s timeout", () => {
+    expect(STATUS_WAIT_MS).toBeLessThanOrEqual(2_000)
+  })
+
   test("calls auth.test once per credential", async () => {
     const { api, calls } = fakeApi([ok(AUTH_TEST)])
     const identity = workspaceIdentity(api)

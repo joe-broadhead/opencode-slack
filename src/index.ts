@@ -4,7 +4,7 @@ import { registerAppIntegration, resolveClient, sameClient, serverNamer, type Cl
 import { isSupportedHost, isTestedHost } from "./host-version.js"
 import { METHODS, registerToolsRpc } from "./host/tools-rpc.js"
 import { eventsMethod, eventsTool, type EventsToolOptions } from "./events.js"
-import { workspaceIdentity } from "./identity.js"
+import { STATUS_WAIT_MS, workspaceIdentity } from "./identity.js"
 import { markReadMethod, markReadTool, type MarkReadOptions } from "./mark-read.js"
 import { slackApi } from "./slack-api.js"
 import { statusMethod } from "./status-method.js"
@@ -137,7 +137,8 @@ export default Plugin.define({
       // The account is read only while the plugin's own server is connected; a failure leaves it out.
       const connected = options !== undefined && !nameInUse && client.client !== undefined
         && servers.find((server) => server.name === SERVER)?.status.status === "connected"
-      const account = connected ? await identity.get().catch(() => undefined) : undefined
+      // Status waits at most STATUS_WAIT_MS for a first auth.test; the lookup goes on for the next status.
+      const account = connected ? await identity.get(STATUS_WAIT_MS).catch(() => undefined) : undefined
       return buildStatus({
         version: VERSION,
         hostVersion,

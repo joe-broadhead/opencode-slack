@@ -21,7 +21,7 @@ interface Sent {
 }
 
 let sent: Sent[] = []
-let answers: Record<string, () => Response> = {}
+let answers: Record<string, () => Response | Promise<Response>> = {}
 const realFetch = globalThis.fetch
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } })
 
@@ -87,6 +87,20 @@ describe("the signed-in account in status", () => {
     await host.status()
     host.store("mcp_slack", undefined)
     expect(Object.keys((await host.status()) as object)).not.toContain("account")
+    expect(sent.map((request) => request.method)).toEqual(["auth.test"])
+  })
+
+  test("a slow auth.test does not hold status up: it answers within about 2 s, and the next status has the account", async () => {
+    let answer!: () => void
+    answers["auth.test"] = () => new Promise((resolve) => { answer = () => resolve(json(AUTH_TEST)) })
+    const host = await setUp()
+    const started = Date.now()
+    const first = (await host.status()) as StatusOutput
+    expect(Date.now() - started).toBeLessThan(3_000)
+    expect(first.state).toBe("connected")
+    expect(Object.keys(first)).not.toContain("account")
+    answer()
+    expect(((await host.status()) as StatusOutput).account).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001" })
     expect(sent.map((request) => request.method)).toEqual(["auth.test"])
   })
 

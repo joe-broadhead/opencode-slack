@@ -15,6 +15,18 @@ const USER_ID = /^[UW][A-Z0-9]{2,20}$/
 const ENTERPRISE_ID = /^E[A-Z0-9]{2,20}$/
 /** How long a failed `auth.test` is not tried again for the same credential. */
 const RETRY_MS = 60_000
+/**
+ * How long status waits for a first `auth.test` before it answers without the account. The lookup goes on, so the next
+ * status has it; a sign-in starts it at once, so it is usually known before anyone asks.
+ */
+export const STATUS_WAIT_MS = 2_000
+
+/** `work`'s value, or undefined once `ms` have passed without one. */
+function within<T>(work: Promise<T | undefined>, ms: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), ms) })
+  return Promise.race([work, late]).finally(() => clearTimeout(timer))
+}
 
 /** The identity in an `auth.test` answer, or undefined when it does not have one in Slack's shape. */
 export function identityOf(body: Readonly<Record<string, unknown>>): Identity | undefined {
@@ -27,7 +39,8 @@ export function identityOf(body: Readonly<Record<string, unknown>>): Identity | 
 
 /**
  * The signed-in account for status: one `auth.test` per credential (a new sign-in is a new credential), shared by
- * concurrent reads. A failure gives no identity, never an error, and is tried again after a minute.
+ * concurrent reads. A failure gives no identity, never an error, and is tried again after a minute. With `wait`, `get`
+ * answers within that many milliseconds, with no identity if Slack has not answered yet.
  */
 export function workspaceIdentity(api: SlackApi, now: () => number = Date.now) {
   let known: { readonly credential: string; readonly identity: Promise<Identity | undefined> } | undefined
@@ -44,13 +57,14 @@ export function workspaceIdentity(api: SlackApi, now: () => number = Date.now) {
   }
 
   return {
-    async get(): Promise<Identity | undefined> {
+    async get(wait?: number): Promise<Identity | undefined> {
       const credential = await api.credential().catch(() => undefined)
       if (credential === undefined) return undefined
-      if (known?.credential === credential) return known.identity
-      if (failed?.credential === credential && now() - failed.at < RETRY_MS) return undefined
-      known = { credential, identity: read(credential) }
-      return known.identity
+      if (known?.credential !== credential) {
+        if (failed?.credential === credential && now() - failed.at < RETRY_MS) return undefined
+        known = { credential, identity: read(credential) }
+      }
+      return wait === undefined ? known.identity : within(known.identity, wait)
     },
   }
 }
