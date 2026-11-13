@@ -474,6 +474,32 @@
         },
         "outputs": [ "proposal:commitment_close", "proposal:commitment_open", "proposal:decision" ],
         "budget": { "tokensPerRun": 15000 }
+      },
+      {
+        "id": "threads-project-page",
+        "title": "Threads you took part in, on a project page",
+        "summary": "A cited block of the Slack threads you posted in, with the replies a channel read never lists.",
+        "trigger": { "schedule": { "every": "1d" } },
+        "extract": {
+          "steps": [
+            { "use": "events_list", "connector": "slack.workspace", "source": "slack" },
+            { "call": "slack_read_thread", "connector": "slack.workspace", "source": "slack", "for": "thread", "with": { "limit": 100 } }
+          ]
+        },
+        "transform": { "into": "events" },
+        "curate": {
+          "stages": [
+            {
+              "engine": "render",
+              "select": { "sources": [ "slack" ], "kinds": [ "message" ], "unit": "thread", "participant": "owner", "window": "7d", "maxUnits": 15 },
+              "into": "section:Threads",
+              "heading": "Slack threads",
+              "line": "{title}: {count} messages {cite}",
+              "max": 15
+            }
+          ]
+        },
+        "outputs": [ "section:Threads" ]
       }
     ]
   }
