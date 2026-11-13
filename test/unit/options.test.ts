@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, HOSTED_REDIRECT_EXAMPLE } from "../../src/defaults.js"
-import { parseOptions, type OptionsError } from "../../src/options.js"
+import { MAX_METADATA_URL_LENGTH, parseOptions, type OptionsError } from "../../src/options.js"
 
 const CLIENT = "1234567890.0987654321"
 
@@ -85,6 +85,41 @@ describe("parseOptions defaults", () => {
     expect(Object.hasOwn(parsed.options, "callbackPort")).toBe(false)
   })
 
+  test.each([
+    "https://id.host.example/.well-known/oauth-authorization-server",
+    "https://ID.Host.Example:8443/slack/metadata?tenant=a",
+    "https://host.example/m",
+  ])("keeps the metadata address %s exactly as given", (auth_server_metadata_url) => {
+    expect(parseOptions(withOAuth({ auth_server_metadata_url }))).toEqual({
+      ok: true,
+      options: {
+        clientId: CLIENT,
+        redirectUri: DEFAULT_REDIRECT_URI,
+        scopes: [...DEFAULT_SCOPES],
+        authServerMetadataUrl: auth_server_metadata_url,
+        allowUntestedHost: false,
+        access: "all",
+        channels: [],
+      },
+    })
+  })
+
+  test("a metadata address needs no client ID in the options: /connect can give it", () => {
+    expect(parseOptions({ oauth: { auth_server_metadata_url: "https://host.example/m" } })).toMatchObject({ ok: true, options: { authServerMetadataUrl: "https://host.example/m" } })
+  })
+
+  test("a metadata address at the length limit is kept", () => {
+    const url = "https://host.example/" + "m".repeat(MAX_METADATA_URL_LENGTH - "https://host.example/".length)
+    expect(url.length).toBe(MAX_METADATA_URL_LENGTH)
+    expect(parseOptions(withOAuth({ auth_server_metadata_url: url }))).toMatchObject({ ok: true, options: { authServerMetadataUrl: url } })
+  })
+
+  test("without a metadata address the options have no such field", () => {
+    const parsed = parseOptions(withOAuth({}))
+    if (!parsed.ok) throw new Error(parsed.error.message)
+    expect(Object.hasOwn(parsed.options, "authServerMetadataUrl")).toBe(false)
+  })
+
   test("returns a copy of the scopes, never the caller's or the default array", () => {
     const scopes = ["channels:read"]
     const parsed = parseOptions(withOAuth({ scopes }))
@@ -117,11 +152,11 @@ describe("parseOptions rejects", () => {
       code: "OPTIONS_INVALID",
       field: "oauth.clientId",
       message: "This option is not supported.",
-      next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
+      next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret, auth_server_metadata_url.",
     })
     expect(rejected(withOAuth({ redirect_port: 8765 }))).toMatchObject({
       field: "oauth.redirect_port",
-      next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
+      next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret, auth_server_metadata_url.",
     })
   })
 
@@ -235,6 +270,27 @@ describe("parseOptions rejects", () => {
     })
   })
 
+  const METADATA_NEXT = "Set it to the https: address of your host's own sign-in service's OAuth metadata document, or remove it to use Slack's."
+  test.each([
+    ["plain http", "http://host.example/m", "Must use https:."],
+    ["loopback http", "http://localhost:9000/m", "Must use https:."],
+    ["another scheme", "file:///etc/metadata.json", "Must use https:."],
+    ["a user name", "https://user@host.example/m", "Must not include credentials."],
+    ["a user name and password", "https://user:pass@host.example/m", "Must not include credentials."],
+    ["a fragment", "https://host.example/m#x", "Must not include a fragment."],
+    ["an empty fragment", "https://host.example/m#", "Must not include a fragment."],
+    ["empty", "", "Must be a valid URL."],
+    ["not a URL", "host.example/m", "Must be a valid URL."],
+    ["too long", "https://host.example/" + "m".repeat(MAX_METADATA_URL_LENGTH), `Must be at most ${MAX_METADATA_URL_LENGTH} characters.`],
+    ["a number", 42, "Must be a string."],
+    ["null", null, "Must be a string."],
+    ["a list", ["https://host.example/m"], "Must be a string."],
+  ])("an auth_server_metadata_url that is %s", (_label, auth_server_metadata_url, message) => {
+    expect(rejected(withOAuth({ auth_server_metadata_url }))).toEqual({
+      code: "OPTIONS_INVALID", field: "oauth.auth_server_metadata_url", message, next: METADATA_NEXT,
+    })
+  })
+
   test.each([
     ["events that is a list", { events: [] }, "events", "Must be an object."],
     ["an unknown events key", { events: { since: "x" } }, "events.since", "This option is not supported."],
@@ -291,6 +347,9 @@ describe("errors never echo values", () => {
     ["a duplicated scope", withOAuth({ scopes: [MARKER, MARKER] })],
     ["a spaced scope", withOAuth({ scopes: [`${MARKER} x`] })],
     ["a non-string secret", withOAuth({ client_secret: [MARKER] })],
+    ["metadata address credentials", withOAuth({ auth_server_metadata_url: `https://${MARKER}:${MARKER}@host.example/m` })],
+    ["a metadata address fragment", withOAuth({ auth_server_metadata_url: `https://host.example/m#${MARKER}` })],
+    ["an http metadata address", withOAuth({ auth_server_metadata_url: `http://${MARKER}.example/m` })],
     ["a server name", withOAuth({}, { server: MARKER })],
     ["a bad override", withOAuth({}, { allowUntestedHost: MARKER })],
   ])("%s", (_label, input) => {

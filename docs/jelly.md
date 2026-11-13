@@ -45,15 +45,24 @@ None.
 
 **`hostClient`.** The `app` step also declares `"hostClient": { "id": "slack", "option": "oauth.client_id" }`: the Slack app a Jelly host holds by the name `slack` (a deployment's own) goes into that option, so `presetBy` marks the step done and the person signs in to Slack once. Jelly writes it into the plugin's options in each agent's engine document, and never over a client ID the agent's own options set. A Jelly before 0.3.2 refuses this declaration's new key.
 
-**The callback.** The default is `http://localhost:8765/callback`, which reaches only a browser on the engine's machine, and two agents signing in to Slack at once collide on that port. The plugin accepts an `https:` `oauth.redirect_uri` with an `oauth.callback_port`, so a deployment can send the browser to its host's return address, for example `https://<host>/oauth/return`, with a free port for each agent's engine. Add that address to the Slack app's Redirect URLs ([The callback: loopback or hosted](configuration.md#the-callback-loopback-or-hosted)).
+**The callback.** The default is `http://localhost:8765/callback`, which reaches only a browser on the engine's machine, and two agents signing in to Slack at once collide on that port. The plugin accepts an `https:` `oauth.redirect_uri` with an `oauth.callback_port`, so a deployment can send the browser to its host's return address, for example `https://<host>/oauth/return`, with a free port for each agent's engine. Add that address to the Slack app's Redirect URLs ([The callback: loopback or hosted](configuration.md#the-callback-loopback-or-hosted)). An `https:` callback is a server redirect for Slack, so each refresh needs the client secret: a deployment that keeps the secret on its sign-in service sets `oauth.auth_server_metadata_url` in the plugin's options to a metadata document whose token endpoint adds it ([Refresh behind a hosted callback](configuration.md#refresh-behind-a-hosted-callback)). Like the other `oauth.*` options it is the deployment's, not a person's, so it is not in `jelly.settings`, which Jelly writes only as top-level keys.
 
 **The relay.** The `slack` step declares `"relay": {}`. A Jelly web tab cannot reach the engine's loopback, and a Slack app sends the browser back only to the addresses it lists, so Jelly may send a web tab's sign-in back through its fixed relay at Jelly ID instead. For that, add the relay address your Jelly host gives you, such as `https://host.example/connect/callback`, to your Slack app's Redirect URLs beside the loopback one. [The app manifest](slack-app-manifest.json) lists only the loopback address, so an app made from it trusts no third-party address unless you add one.
 
 Jelly folds the declared sign-ins into this plugin's one card, which shows each as Connected, Not signed in or Sign in again (expired or revoked), and starts, renews and signs out of each. An agent's `jelly_connection_request`, or a tool result that names this plugin's "Run /connect and choose …" next step, opens the same card. The plugin still signs in through OpenCode, as it does without Jelly; the declaration only tells Jelly which of the engine's integrations and servers are this plugin's.
+
+## Settings
+
+`jelly.contributes.settings` declares one setting, `access`, the option of the same name, as a choice of three:
+**Allowed** (`all`, the default), **Ask before changes** (`ask-changes`) and **Read only** (`read-only`), with Jelly's
+own line for each. Jelly saves only one of the three, the options parser's own set. A Jelly before app#1301 does not
+know declared choices and refuses the whole declaration. `oauth.*` and `events.*` are nested, and Jelly writes only
+top-level values, so they are not declared. `test/unit/jelly.test.ts` checks the setting against Jelly's setting rules,
+restated in `test/support/jelly-settings.ts`, and each value against the options parser.
 
 ## Versions
 
 Jelly's curated catalogue pins an exact version. Publish each release under a new version, so a
 review in Jelly can tell the two apart.
 
-The declaration test runs the shared kit, `test/support/jelly-kit.ts`, which checks the declaration and this page against Jelly's plugin authors' standard. `scripts/check-copies.mjs` holds the kit equal to the copy every plugin carries; the tools RPC and the `events_list` contract are the vendored source contract's modules, pinned by its `SHA256SUMS`.
+The declaration test runs the shared kit, `test/support/jelly-kit.ts`, which checks the declaration and this page against Jelly's plugin authors' standard. `scripts/check-copies.mjs` holds the kit, Jelly's setting rules (`test/support/jelly-settings.ts`) and the vendored source contract's `SHA256SUMS`, equal to the copies every plugin carries. The tools RPC and the `events_list` contract are not copies: they are the vendored source contract's `tools-rpc`, `events` and `cursor` modules.

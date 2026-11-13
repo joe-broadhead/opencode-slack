@@ -11,7 +11,7 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "github:joe-broadhead/opencode-slack#v0.0.0",
+      "package": "github:joe-broadhead/opencode-slack#v0.0.1",
       "options": {
         "oauth": {
           "client_id": "YOUR_SLACK_CLIENT_ID",
@@ -33,6 +33,7 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
 | `oauth.callback_port` | Not set | A whole number from 1 to 65535: the port of OpenCode's local callback listener on `127.0.0.1`. Required with an `https:` `oauth.redirect_uri`, and refused with a loopback one, whose own port is the listener's. |
 | `oauth.scopes` | `["channels:history", "channels:read", "search:read.public", "users:read"]` | A non-empty list of unique Slack user scopes, each without spaces. Your list replaces the default list. See [Scopes](#scopes). |
 | `oauth.client_secret` | Not set (public client with PKCE) | A non-empty string, and only together with `oauth.client_id`. Set it only for a Slack app that does not use PKCE, and only through `{env:NAME}`. See [Client secret](#client-secret). |
+| `oauth.auth_server_metadata_url` | Not set: OpenCode discovers Slack's authorization server | An `https:` URL of at most 2048 characters, with no user name, password or fragment. Passed to OpenCode unchanged; OpenCode uses this OAuth metadata document in place of Slack's for the whole sign-in: its `authorization_endpoint`, its `token_endpoint` (which receives the code, every refresh token and any client secret) and its `issuer`. Point it only at your host's own sign-in service, serving a copy of Slack's metadata with only `token_endpoint` changed. See [Refresh behind a hosted callback](#refresh-behind-a-hosted-callback). |
 | `allowUntestedHost` | `false` | `true` or `false`. If it is `true`, the plugin runs on an OpenCode version outside its supported range, and status keeps warning. See [Host check](#host-check). |
 | `access` | `"all"` | `"all"`, `"ask-changes"` or `"read-only"`. It generates the default rules: every tool allowed, the reads allowed and the rest asking, or the reads allowed and the rest denied. See [The access option](#the-access-option). |
 | `events.channels` | `[]`: no cap | At most 16 unique Slack ids: channels (`C…`), private channels and group messages (`G…`), direct messages (`D…`), or users whose direct messages to read (`U…`, `W…`). A **cap** on what `slack_events_list` may read: a call's `scope` is intersected with it, and with none set the scope alone decides. See [Events list](#events-list). |
@@ -60,6 +61,31 @@ After Slack approves a sign-in, it sends the browser to `oauth.redirect_uri` wit
 
 Whichever you use, add it to the Slack app's redirect URLs: see [Create the Slack app](#create-the-slack-app). Slack matches the host and port exactly, so register the address as the browser reaches it, path included.
 
+### Refresh behind a hosted callback
+
+Slack issues rotating tokens that end after 12 hours, and OpenCode refreshes them. Whether a refresh needs the client secret depends on the redirect the sign-in used ([Using PKCE](https://docs.slack.dev/authentication/using-pkce), [Using token rotation](https://docs.slack.dev/authentication/using-token-rotation)):
+
+- **Desktop redirect:** a custom URI scheme, or `localhost` when the app has PKCE on. The refresh needs no secret, so the loopback default works with a public PKCE app.
+- **Server redirect:** every other address, a hosted `https:` callback included. The refresh must carry the client secret. Without it Slack answers `{"ok":false,"error":"bad_client_secret"}` with HTTP 200, so OpenCode logs the refresh request as succeeded, then the server as failed, and the person must sign in again every 12 hours.
+
+Behind a hosted callback, choose one:
+
+- Give OpenCode the secret: `oauth.client_secret` through `{env:NAME}`, or the `/connect` entry. See [Client secret](#client-secret). Anyone who can run a tool in that OpenCode's environment can then read it.
+- Keep the secret on your host's sign-in service. Serve a copy of Slack's own OAuth authorization server metadata (RFC 8414) that changes **only** `token_endpoint`, to your service's own proxy; the proxy adds the client secret and forwards the request to Slack's token endpoint. Slack's MCP server names `https://mcp.slack.com` as its authorization server, so copy `https://mcp.slack.com/.well-known/oauth-authorization-server`, which today has the `issuer` `https://mcp.slack.com`, the `authorization_endpoint` `https://slack.com/oauth/v2_user/authorize` and the `token_endpoint` `https://slack.com/api/oauth.v2.user.access`. Keep `issuer` and `authorization_endpoint` exactly as Slack's: OpenCode accepts the `issuer` unchecked and stamps the stored credentials with it, so a different one discards the sign-ins already stored, and the browser goes to whatever `authorization_endpoint` says. Re-copy the document when Slack changes it. Set `oauth.auth_server_metadata_url` to your copy:
+
+  ```jsonc
+  "oauth": {
+    "client_id": "YOUR_SLACK_CLIENT_ID",
+    "redirect_uri": "https://host.example/oauth/return",
+    "callback_port": 8766,
+    "auth_server_metadata_url": "https://id.host.example/.well-known/oauth-authorization-server"
+  }
+  ```
+
+  The plugin passes the address to OpenCode unchanged. OpenCode uses the document in place of Slack's for the whole sign-in: it sends the browser to its `authorization_endpoint`, sends the authorization code, the PKCE verifier, every refresh token and the client secret, if one is set, to its `token_endpoint`, and trusts its `issuer`, against which it also checks the sign-in callback when the document advertises the `iss` parameter (RFC 9207). Whoever serves it controls the Slack sign-in and receives the person's Slack tokens, so only the owner of the OpenCode configuration should set it, and only to your host's own sign-in service. See [SECURITY.md](../SECURITY.md). Every OpenCode release the plugin supports, 2.2.3 on, reads this key.
+
+Without `oauth.auth_server_metadata_url`, the plugin registers exactly the entry it always has.
+
 **Two sign-ins at once.** The listener holds its port while a sign-in waits. Two OpenCode processes on one machine that sign in at the same time with the default `http://localhost:8765/callback` collide, and the second sign-in fails because the port is in use. Finish one sign-in first, or give each process its own callback: another loopback port, such as `http://localhost:8767/callback`, or its own hosted address with its own `oauth.callback_port`. Register each one in the Slack app.
 
 ### Where the client ID comes from
@@ -82,7 +108,7 @@ The checks run in this order, and status reports only the first problem:
 | `options` | Plugin options must be an object. | Set options to an object, or remove them. |
 | any other top-level key | This option is not supported. | Remove it. Supported options: oauth, allowUntestedHost. |
 | `oauth` | Must be an object. | Set oauth to an object such as `{ "client_id": "..." }`. |
-| any other `oauth` key | This option is not supported. | Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret. |
+| any other `oauth` key | This option is not supported. | Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret, auth_server_metadata_url. |
 | `oauth.client_id` | Must be a non-empty string without spaces. | Copy the client ID from the Basic Information page of your Slack app. |
 | `oauth.redirect_uri` | Must be a string. / Must be a valid URL. / Must use http: or https:. / An http: URL must use the host localhost or 127.0.0.1. / An http: URL must include an explicit port. / Must not include credentials. / Must not include a query or fragment. / Must include a path, such as /callback. | Use a URL listed in the app's Redirect URLs, for example `http://localhost:8765/callback` or `https://host.example/oauth/return`. |
 | `oauth.callback_port` | Must be a whole number from 1 to 65535. | Set it to the local port that receives the forwarded callback, for example 8766. |
@@ -92,6 +118,7 @@ The checks run in this order, and status reports only the first problem:
 | `oauth.scopes` | Lists a scope more than once. | Remove the duplicate scope. |
 | `oauth.client_secret` | Must be a non-empty string. | Set it to `{env:SLACK_CLIENT_SECRET}` and export that variable, or remove it to use PKCE. |
 | `oauth.client_secret` | Needs oauth.client_id. | Set oauth.client_id to your Slack app's client ID, or remove oauth.client_secret. |
+| `oauth.auth_server_metadata_url` | Must be a string. / Must be at most 2048 characters. / Must be a valid URL. / Must use https:. / Must not include credentials. / Must not include a fragment. | Set it to the https: address of your host's own sign-in service's OAuth metadata document, or remove it to use Slack's. |
 | `allowUntestedHost` | Must be true or false. | Set it to true only to run on an OpenCode version outside the supported range. |
 | `events` | Must be an object. | Set events to an object such as `{ "channels": ["C0123ABCD45"] }`. |
 | `events.<key>` | This option is not supported. | Remove it. Supported events options: channels. |
@@ -164,7 +191,7 @@ With a client ID, the plugin adds one MCP server named `slack`:
 }
 ```
 
-With a client secret, it also passes `client_secret`. With an `https:` `oauth.redirect_uri`, it also passes `callback_port`, the port OpenCode's listener takes; with a loopback one it does not, and OpenCode listens on the redirect's own port. It leaves out `protocol`, `timeout`, `headers` and `codemode`, so OpenCode's defaults apply: the classic MCP handshake and Code Mode on. Code Mode keeps Slack's tool schemas out of every turn. The model finds the tools as `tools.slack.<tool>` inside `execute`.
+With a client secret, it also passes `client_secret`. With `oauth.auth_server_metadata_url`, it also passes `auth_server_metadata_url`, unchanged. With an `https:` `oauth.redirect_uri`, it also passes `callback_port`, the port OpenCode's listener takes; with a loopback one it does not, and OpenCode listens on the redirect's own port. It leaves out `protocol`, `timeout`, `headers` and `codemode`, so OpenCode's defaults apply: the classic MCP handshake and Code Mode on. Code Mode keeps Slack's tool schemas out of every turn. The model finds the tools as `tools.slack.<tool>` inside `execute`.
 
 The plugin always sends `redirect_uri`. Without it, OpenCode would use `http://127.0.0.1:<port>/callback`, which does not match a Slack app registered with `http://localhost:8765/callback`.
 
@@ -475,7 +502,7 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | none: a shadowed skill | connected | Move or rename the skill at `<path>`, so that this plugin's slack-search skill loads, then run opencode reload. |
 | none: agents without default rules | connected | Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools. |
 | `STATUS_UNAVAILABLE` | none: status itself failed | Run /slack-status again in a moment (in the dialog: press r to retry). |
-| `SKILLS_INVALID` | none: the plugin does not load | Reinstall the plugin: opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.0, then opencode plugin add github:joe-broadhead/opencode-slack#v0.0.0, then opencode reload. A bundled skill is missing or has invalid frontmatter. |
+| `SKILLS_INVALID` | none: the plugin does not load | Reinstall the plugin: opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.1, then opencode plugin add github:joe-broadhead/opencode-slack#v0.0.1, then opencode reload. A bundled skill is missing or has invalid frontmatter. |
 | `INPUT_INVALID` | none: `slack_events_list` | Pass since, cursor, limit, account, scope or source as events_list's schema describes them. |
 | `SCOPE_UNKNOWN` | none: `slack_events_list` | Pass scope.channels, or leave scope out. |
 | `SCOPE_INVALID` | none: `slack_events_list` | Pass channel and direct message ids, such as C0123ABCD45. |

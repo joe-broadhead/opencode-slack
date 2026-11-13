@@ -6,6 +6,7 @@ import plugin from "../../src/index.js"
 import { parseOptions } from "../../src/options.js"
 import { defaultRules } from "../../src/permissions.js"
 import { type Declaration, declarationProblems, docProblems, effectFromRules, readPackage } from "../support/jelly-kit.js"
+import { ACCESS_CHOICES, type PluginSetting, settingChoices, settingsProblems, settingValueIssue } from "../support/jelly-settings.js"
 import { fakeHost } from "./fakes.js"
 
 /**
@@ -20,13 +21,28 @@ const ROOT = new URL("../../", import.meta.url)
 const jelly = readPackage(ROOT).jelly as Declaration & { signIns: SignIn[] }
 
 describe("the jelly declaration", () => {
-  test("declares the flat access option", () => {
-    const settings = (jelly.contributes as { settings: { key: string; type: string; default: unknown }[] }).settings
-    expect(settings.map(({ key, type }) => ({ key, type }))).toEqual([{ key: "access", type: "string" }])
-    expect(parseOptions({ access: "read-only" })).toMatchObject({ ok: true, options: { access: "read-only" } })
-    const defaults = parseOptions({})
-    expect(defaults.ok).toBe(true)
-    if (defaults.ok) expect(settings[0]?.default).toBe(defaults.options.access)
+  test("declares the flat access option, with Jelly's own words for its three values", () => {
+    const settings = (jelly.contributes as { settings: PluginSetting[] }).settings
+    expect(settings).toEqual([
+      {
+        key: "access",
+        label: "Access",
+        type: "string",
+        description: "How much the plugin's tools may do. Generates default rules for agents with a base allow rule.",
+        choices: ACCESS_CHOICES,
+        default: "all",
+      },
+    ])
+    expect(settingsProblems(settings)).toEqual([])
+  })
+  test("the options parser takes every declared access choice, its default included, and refuses a value outside them", () => {
+    const access = (jelly.contributes as { settings: PluginSetting[] }).settings[0]!
+    const values = (settingChoices(access) ?? []).map((choice) => choice.value)
+    expect(values).toEqual(["all", "ask-changes", "read-only"])
+    for (const value of values) expect(parseOptions({ access: value })).toMatchObject({ ok: true, options: { access: value } })
+    expect(parseOptions({})).toMatchObject({ ok: true, options: { access: access.default } })
+    expect(settingValueIssue(access, "write")).not.toBeNull()
+    expect(parseOptions({ access: "write" })).toMatchObject({ ok: false })
   })
   test("follows the plugin authors' standard, with the effects the plugin's own default rules give", () => {
     expect(declarationProblems(ROOT, { effectOf: effectFromRules(defaultRules()) })).toEqual([])

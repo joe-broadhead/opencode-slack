@@ -527,7 +527,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
           state: "not_configured",
           code: "OPTIONS_INVALID",
           message: "Option oauth.bogus: This option is not supported.",
-          nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
+          nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret, auth_server_metadata_url.",
         })
         const plugins = (await host.client.plugin.list(at("invalid"))).data
         expect(plugins.find((plugin) => plugin.id === "slack.workspace")?.state).toEqual({ status: "active" })
@@ -540,7 +540,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
     })
 
     describe("an https redirect", () => {
-      test("registers the server with the redirect and the callback port, which the host accepts", async () => {
+      test("registers the server with the redirect, the callback port and the metadata address, which the host keeps", async () => {
         expect((await probe("hosted")).registered).toStrictEqual({
           type: "remote",
           url: "https://mcp.slack.com/mcp",
