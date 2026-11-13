@@ -13,7 +13,7 @@ import { KNOWN_TOOLS, READ_TOOLS } from "../../src/tools.js"
 import { assertMemoryDeclaration, memoryDeclarationProblems, readVerbProblem, sizeOf, SIZE_WARN_BYTES, WRITE_VERBS } from "../support/memory-kit.mjs"
 // @ts-expect-error its schema checker is published the same way.
 import { schemaProblems } from "../support/schema-check.mjs"
-import { declarationFixtureProblems, identityFor, jobGrants, pathValue, type FixtureTool, type KitRead } from "../support/connector-fixture.js"
+import { declarationFixtureProblems, identityFor, jobGrants, perUnitValue, pathValue, unitInScope, type FixtureTool, type KitRead } from "../support/connector-fixture.js"
 import schema from "../support/memory-plugin.v2.json" with { type: "json" }
 import { createAnswers, SEED, tsOfOffset } from "../fixtures/fake-slack-shaped.js"
 
@@ -74,7 +74,7 @@ describe("the memory declaration", () => {
     expect(memoryDeclarationProblems(declaration())).toEqual([])
     assertMemoryDeclaration(declaration())
     expect(sizeOf(declaration())).toBeLessThanOrEqual(SIZE_WARN_BYTES)
-    expect(sizeOf(declaration())).toBe(3_856)
+    expect(sizeOf(declaration())).toBe(3_839)
   })
 
   test("declares only read verbs in this plugin's namespace", () => {
@@ -92,11 +92,21 @@ describe("the memory declaration", () => {
     expect(memoryDeclarationProblems(broken)).toContainEqual(expect.stringContaining("contains the write verb"))
   })
 
-  test("the thread read is per unit, bound to a confirmed channel, and the thread ts is not a scope key", () => {
+  test("the identity asserts only what the owner-only call reads", () => {
+    const identity = connector()["identity"] as { grants: { action: string }[] }
+    expect(identity.grants.map((grant) => grant.action)).toEqual(["slack_events_list", "slack_slack_read_user_profile"])
+    // And the source's own list still names the channel read a job's session needs.
+    expect((source()["grants"] as { action: string }[]).map((grant) => grant.action)).toContain("slack_slack_read_channel")
+  })
+
+  test("the thread read takes each input from the unit, bound to a confirmed channel", () => {
     const thread = (connector()["reads"] as Record<string, unknown>[]).find((read) => read["method"] === "slack_read_thread")
     expect(thread).toBeDefined()
     // The published schema's perUnit enum names the event's fields: a thread's channel and ts are the two parts.
-    expect(thread!["scopeInputs"]).toEqual({ channel_id: "channels", message_ts: { perUnit: "thread_ts", bind: "channels" } })
+    expect(thread!["scopeInputs"]).toEqual({
+      channel_id: { perUnit: "thread_channel", bind: "channels" },
+      message_ts: { perUnit: "thread_ts", bind: "channels" },
+    })
     expect(thread!["grants"]).toEqual([{ action: "slack_slack_read_thread", resource: "*" }])
     // Revision 4: the thread ts is per unit, so the connector offers only the channels for confirmation.
     expect(scopeOf().map((entry) => entry["key"])).toEqual(["channels"])
@@ -275,6 +285,22 @@ describe("the events_list contract, version 2", () => {
       "Agreed. I'll send the migration plan by Friday.",
     ])
     expect(thread.messages.slice(1).every((message) => message.thread_ts === tsOfOffset(NOW, 7_000))).toBe(true)
+  })
+
+  test("a thread unit takes its channel from the event, and one outside the confirmed channels is refused", async () => {
+    const read: Read = async (tool, input) => ({ output: answers(tool, input), text: "" })
+    const event = (await slackEvents(read, [PROJECT], { since: SINCE, scope: { channels: [PROJECT] } }, NOW)).events.find((entry) => entry.thread !== null)!
+    const inputs = (connector()["reads"] as Record<string, unknown>[]).find((entry) => entry["method"] === "slack_read_thread")!["scopeInputs"] as Record<string, unknown>
+    // Both values come from the event's own `thread` field, never from the confirmed list.
+    expect(perUnitValue(event, "thread_channel")).toBe(PROJECT)
+    expect(perUnitValue(event, "thread_ts")).toBe(event.thread!.split(":")[2]!)
+    expect(unitInScope(event, inputs, [PROJECT])).toEqual({ ok: true })
+    // Confirmed another conversation: the unit's own channel is not in it, so the read never happens.
+    const refused = unitInScope(event, inputs, [DM])
+    expect(refused.ok).toBe(false)
+    expect(refused).toMatchObject({ reason: expect.stringContaining(`the unit's thread_channel ${PROJECT} is not among the confirmed channels`) })
+    // A unit with no thread at all is refused too, rather than falling back to the confirmed list.
+    expect(unitInScope({ thread: null }, inputs, [PROJECT])).toMatchObject({ ok: false, reason: expect.stringContaining("names no thread_channel") })
   })
 
   test("the fixture carries one instruction-shaped message and one pasted block, both untrusted data", async () => {

@@ -322,8 +322,7 @@
         "input": { "limit": 0 },
         "grants": [
           { "action": "slack_events_list", "resource": "*" },
-          { "action": "slack_slack_read_user_profile", "resource": "*" },
-          { "action": "slack_slack_read_channel", "resource": "*" }
+          { "action": "slack_slack_read_user_profile", "resource": "*" }
         ],
         "account": "$.account",
         "owner": { "id": "$.owner.id", "label": "$.owner.label" }
@@ -343,7 +342,7 @@
           "input": {  },
           "grants": [ { "action": "slack_slack_read_thread", "resource": "*" } ],
           "scopeInputs": {
-            "channel_id": "channels",
+            "channel_id": { "perUnit": "thread_channel", "bind": "channels" },
             "message_ts": { "perUnit": "thread_ts", "bind": "channels" }
           },
           "kinds": [ "message" ],

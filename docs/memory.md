@@ -28,11 +28,12 @@ fine.
   `events.channels` option: a scope never widens the option, and with no option set the scope alone decides. The option
   is therefore a **cap**, and whichever is narrower wins. Every result echoes the scope the call named (`{}` when it
   named none, which is the whole source), and reads only what the cap allows.
-- **`thread`, a per-unit input, not a scope key.** `slack_read_thread`'s `message_ts` is
-  `{ "perUnit": "thread_ts", "bind": "channels" }`: the runner fills it from the selected event's `thread` field
-  (`slack-thread:<channel>:<ts>`), and `bind` makes the thread's channel stay inside the confirmed channels, checked
-  before the call. Nothing about a thread is offered for confirmation, because a thread timestamp is not something a
-  person picks.
+- **A thread, per unit, not a scope key.** `slack_read_thread`'s `channel_id` and `message_ts` are both per-unit
+  inputs — `{ "perUnit": "thread_channel", "bind": "channels" }` and `{ "perUnit": "thread_ts", "bind": "channels" }` —
+  filled from the selected event's `thread` field (`slack-thread:<channel>:<ts>`), never from its text. The unit's own
+  channel is checked against the confirmed `channels` **before the call**, so a thread in a conversation the person never
+  confirmed is refused, and a message with no thread is refused rather than read from the confirmed list. Nothing about
+  a thread is offered for confirmation, because a thread timestamp is not something a person picks.
 - **Suggestions come from the manifest, at bind only.** The `channels` key declares `suggestBy`
   (`slack_list_user_channels`, its own grant, and the JSONPaths for ids and labels). Memory calls it **before consent, in
   the probe session**; the pairs are shown in the console and never stored, and it is **not** part of a job's grants.

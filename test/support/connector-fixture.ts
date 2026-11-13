@@ -44,6 +44,45 @@ export function pathValue(value: unknown, path: unknown): unknown {
 /** A declaration's connector. */
 export const connectorOf = (declaration: unknown): Json => record(record(declaration)["connector"])
 
+/**
+ * The parts an event's `thread` names: a stable key `<scheme>-thread:<channel id>:<thread ts>`, which is where contract
+ * 2's `thread_channel` and `thread_ts` per-unit fields come from. Never from the event's `text`.
+ */
+export function threadParts(event: { thread?: string | null }): { channel?: string; ts?: string } {
+  const parts = /^[a-z][a-z0-9+.-]*-thread:([^:]+):(.+)$/.exec(event.thread ?? "")
+  return parts === null ? {} : { channel: parts[1]!, ts: parts[2]! }
+}
+
+/** A declared per-unit field's value for an event, from the event's structured fields only. */
+export function perUnitValue(event: { thread?: string | null; external_id?: string }, field: string): string | undefined {
+  const parts = threadParts(event)
+  return field === "thread_channel" ? parts.channel : field === "thread_ts" ? parts.ts : field === "external_id" ? event.external_id : undefined
+}
+
+/**
+ * Whether a unit may be read at all (§9.1 C): a per-unit input takes its value from the event's structured fields, and
+ * the **unit's own channel** (`thread_channel`) must be inside the confirmed ids of the scope key its `bind` names. The
+ * check runs before the call, so a thread in a channel the person never confirmed is refused, and a unit with no thread
+ * is refused rather than falling back to the confirmed list.
+ */
+export function unitInScope(
+  event: { thread?: string | null; external_id?: string },
+  inputs: Readonly<Record<string, unknown>>,
+  confirmed: readonly string[],
+): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
+  const channel = threadParts(event).channel
+  for (const [input, spec] of Object.entries(inputs)) {
+    if (typeof spec !== "object" || spec === null) continue
+    const perUnit = record(spec)["perUnit"]
+    const bind = record(spec)["bind"]
+    if (typeof perUnit !== "string" || typeof bind !== "string") continue
+    if (perUnitValue(event, perUnit) === undefined) return { ok: false, reason: `the unit names no ${perUnit} for ${input}` }
+    if (channel === undefined) return { ok: false, reason: `the unit names no thread_channel, so ${input} cannot be bound to ${bind}` }
+    if (!confirmed.includes(channel)) return { ok: false, reason: `${input} takes ${perUnit}, but the unit's thread_channel ${channel} is not among the confirmed ${bind}` }
+  }
+  return { ok: true }
+}
+
 /** The identity a source uses: its own, else the connector's (§9.2: identity is per source). */
 export function identityFor(declaration: unknown, sourceId: string | undefined): Json {
   const source = array(record(declaration)["sources"]).map(record).find((entry) => entry["id"] === sourceId)
