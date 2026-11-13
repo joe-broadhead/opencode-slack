@@ -44,7 +44,12 @@ const RULES: readonly Rule[] = [
     },
   },
   { name: "responsePolicy", pattern: /responsePolicy/, example: "responsePolicy: \"text-only\"," },
-  { name: "Plugin.image and profile images", pattern: /\bimage\b|PROFILE_IMAGE/, example: "Plugin.define({ id, image: PROFILE_IMAGE, setup })" },
+  {
+    name: "Plugin.image and profile images",
+    pattern: /\bimage\b|PROFILE_IMAGE/,
+    example: "Plugin.define({ id, image: PROFILE_IMAGE, setup })",
+    except: { "test/support/memory-kit.mjs": "Memory's vendored kit refuses a Markdown image in a template line; it names no plugin image" },
+  },
   { name: "ctx.generate.text", pattern: /generate\.text/, example: "await ctx.generate.text(prompt)" },
   { name: "experimental.policies", pattern: /experimental\.policies/, example: "experimental.policies.push(policy)" },
   { name: "ctx.experimental.artifact", pattern: /\bexperimental\s*\??\.\s*artifact\b/, example: "await ctx.experimental?.artifact.create(file)" },

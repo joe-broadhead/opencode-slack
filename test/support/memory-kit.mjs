@@ -98,11 +98,16 @@ export function memoryDeclarationProblems(memory) {
   const declaredActions = new Set(connectorGrants(connector).map((g) => g.action))
   const suggestGrants = connectorSuggestGrants(connector)
   const sourceIds = []
+  const suggestActions = new Set(connectorSuggestGrants(connector).map((grant) => grant.action))
   if (memory.sources !== undefined) {
     if (!Array.isArray(memory.sources)) p.push(`"sources" must be a list`)
     else for (const [i, source] of memory.sources.entries()) {
       p.push(...sourceProblems(source, `sources[${i}]`, scopeKeys, declaredActions, ns, plain(connector) && (connector.identity !== undefined || connector.identityRead !== undefined)))
       if (plain(source) && typeof source.id === "string") sourceIds.push(source.id)
+      // §9.1 D: a source's grants are a job's grants, so a suggestBy grant here has entered a job by the back door.
+      if (plain(source) && Array.isArray(source.grants)) {
+        for (const grant of source.grants) if (plain(grant) && suggestActions.has(grant.action)) p.push(`sources[${i}].grants names ${grant.action}, which is a suggestBy grant: suggestBy runs only at bind, so it is never a job's (§9.1 D)`)
+      }
     }
   }
   if (plain(connector) && connector.identityRead !== undefined && Array.isArray(memory.sources) && memory.sources.length > 0) {
@@ -112,7 +117,7 @@ export function memoryDeclarationProblems(memory) {
     if (!Array.isArray(memory.templates)) p.push(`"templates" must be a list`)
     else {
       if (memory.templates.length > 8) p.push(`"templates" holds ${memory.templates.length}, over 8`)
-      for (const [i, template] of memory.templates.entries()) p.push(...templateProblems(template, `templates[${i}]`, sourceIds, ns))
+      for (const [i, template] of memory.templates.entries()) p.push(...templateProblems(template, `templates[${i}]`, sourceIds, ns, readByMethod(connector)))
     }
   }
 
@@ -192,7 +197,7 @@ function identityProblems(identity, where, ns, { sourceLevel }) {
 function connectorProblems(connector, ns) {
   if (!plain(connector)) return [`"connector" must be an object`]
   const p = []
-  const allowed = ["accounts", "identity", "identityRead", "operationScoped", "reads", "scope", "billing"]
+  const allowed = ["accounts", "identity", "identityRead", "operationScoped", "reads", "scope", "billing", "urlHosts"]
   for (const key of Object.keys(connector)) if (!allowed.includes(key)) p.push(`"connector" has "${key}", which schema v2 does not define`)
   if (connector.accounts !== "single" && connector.accounts !== "multi") p.push(`"connector.accounts" must be "single" or "multi"`)
   if (connector.operationScoped !== undefined && typeof connector.operationScoped !== "boolean") p.push(`"connector.operationScoped" must be true or false`)
@@ -265,6 +270,17 @@ function connectorProblems(connector, ns) {
     }
   }
   if (connector.billing !== null && connector.billing !== undefined && !billingShape(connector.billing)) p.push(`"connector.billing" must be null or { unit: "call", note }`)
+  // §9.4: the hosts a templated {url} may point at; an undeclared host never renders.
+  if (connector.urlHosts !== undefined) {
+    if (!Array.isArray(connector.urlHosts)) p.push(`"connector.urlHosts" must be a list of host patterns`)
+    else {
+      if (connector.urlHosts.length > 8) p.push(`"connector.urlHosts" holds ${connector.urlHosts.length}, over 8`)
+      for (const host of connector.urlHosts) {
+        const problem = urlHostProblem(host)
+        if (problem) p.push(`"connector.urlHosts" has ${JSON.stringify(host)}, which ${problem}`)
+      }
+    }
+  }
   return p
 }
 
@@ -301,6 +317,8 @@ function scopeInputProblems(inputs, where, keys) {
   // §9.1 C: a read is pinned by a binding-key input, or by perUnit inputs that all agree on one bind.
   if (binds.size > 1) p.push(`${where} binds per-unit inputs to ${[...binds].join(", ")}: they must all name one scope key`)
   if (bound === 0 && binds.size === 0) p.push(`${where} pins no binding-key input, so the read is not scoped to what the person confirmed`)
+  // §9.1 C: external_id names no conversation, so it cannot be a read's only pin.
+  if (perUnitFields.length > 0 && perUnitFields.every(([, value]) => value.perUnit === "external_id")) p.push(`${where} is pinned only by external_id, which names no conversation: a read needs a confirmed scope key (§9.1 C)`)
   if (bound > 0 && binds.size > 0 && ![...binds].every((key) => Object.values(inputs).includes(key))) {
     p.push(`${where} pins a per-unit input through an unrelated key: its bind is not one of this read's binding-key inputs`)
   }
@@ -349,10 +367,87 @@ function sourceProblems(source, where, scopeKeys, declared, ns, identityByDefaul
 }
 
 const billingShape = (v) => plain(v) && v.unit === "call" && typeof v.note === "string" && v.note.length > 0 && v.note.length <= 200
+/** The markup a template's literal line may not carry (§9.4): a comment (a lens marker is one), an image, a link, an HTML tag, a heading or a quote. */
+const LINE_MARKUP = [
+  [/<!--|-->/, "an HTML comment, or a lens marker"],
+  [/!\[/, "an image"],
+  [/\]\(/, "a link"],
+  [/<\/?[a-z]/i, "an HTML tag"],
+  [/^\s*#{1,6}\s/, "a heading"],
+  [/^\s*>\s/, "a quote"],
+]
+
+/**
+ * The multi-label public suffixes a person can register under but not *be*, the
+ * hosts anyone can claim, and the measurement and advertising hosts a collected
+ * link must never point at. A small embedded list; the registrable-domain rule
+ * catches a suffix it misses.
+ */
+const PUBLIC_SUFFIXES = new Set([
+  "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "net.uk", "sch.uk", "ltd.uk", "plc.uk",
+  "com.au", "net.au", "org.au", "edu.au", "gov.au", "co.nz", "net.nz", "org.nz", "govt.nz",
+  "co.jp", "ne.jp", "or.jp", "go.jp", "co.kr", "or.kr", "co.in", "net.in", "org.in", "co.za",
+  "com.br", "net.br", "org.br", "com.mx", "com.ar", "com.co", "com.pe", "com.ve", "com.uy",
+  "com.tr", "com.cn", "com.tw", "com.hk", "com.sg", "com.my", "com.ph", "com.vn", "com.pk",
+  "com.ng", "com.sa", "com.eg", "com.ua", "com.pl", "com.es", "com.gr", "com.pt", "com.ro",
+  "co.id", "co.il", "co.ke", "co.th", "co.ae", "co.ma", "co.bw", "co.zw", "co.tz", "co.ug",
+])
+const SHARED_HOSTS = new Set([
+  "cloudfront.net", "amazonaws.com", "storage.googleapis.com", "blob.core.windows.net", "web.core.windows.net",
+  "herokuapp.com", "vercel.app", "netlify.app", "pages.dev", "workers.dev", "github.io", "githubusercontent.com",
+  "gitlab.io", "bitbucket.io", "appspot.com", "firebaseapp.com", "web.app", "azurewebsites.net", "elasticbeanstalk.com",
+  "onrender.com", "railway.app", "fly.dev", "deno.dev", "glitch.me", "repl.co", "surge.sh", "ngrok.io", "r2.dev",
+  "blogspot.com", "wordpress.com", "wixsite.com", "translate.goog", "ipfs.io", "dweb.link", "bit.ly", "tinyurl.com",
+])
+const TRACKER_HOSTS = new Set([
+  "doubleclick.net", "google-analytics.com", "googletagmanager.com", "googleadservices.com", "googlesyndication.com",
+  "2mdn.net", "facebook.net", "scorecardresearch.com", "criteo.com", "taboola.com", "outbrain.com", "adnxs.com",
+  "hotjar.com", "segment.io", "mixpanel.com", "amplitude.com", "quantserve.com", "moatads.com", "adsrvr.org",
+  "casalemedia.com", "rubiconproject.com", "pubmatic.com", "openx.net", "clarity.ms", "branch.io", "appsflyer.com",
+  "adjust.com", "kochava.com", "smartadserver.com", "teads.tv", "yieldmo.com", "bat.bing.com",
+])
+
+/**
+ * The second-level labels a ccTLD hands out as registry rules (com.de, gov.in,
+ * co.uk): a pattern of one of these plus a two-letter code names no site.
+ */
+const EFFECTIVE_SLD = new Set([
+  "com", "co", "gov", "org", "net", "ac", "edu", "ne", "or", "go", "nic", "mil", "sch", "ltd", "plc",
+  "gen", "web", "biz", "info", "nom", "res", "idv", "gob", "gouv", "gv", "k12", "muni",
+])
+
+/** Why a host pattern is too broad to mean anything, or null (§9.4). */
+export function urlHostProblem(host) {
+  if (typeof host !== "string" || !/^(?:\*\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(host)) return "is not a host pattern (a domain such as slack.com, or *.slack.com)"
+  const bare = host.toLowerCase().replace(/^\*\./, "")
+  const labels = bare.split(".")
+  if (labels.length < 2) return "names no registrable domain (a host needs at least two labels)"
+  // A punycode label hides what the host is: another script, or a lookalike.
+  if (labels.some((label) => label.startsWith("xn--"))) return "is a punycode host (a label starting xn--), which hides what it is"
+  let suffix = null
+  for (const size of [3, 2]) if (labels.length > size && PUBLIC_SUFFIXES.has(labels.slice(-size).join("."))) { suffix = labels.slice(-size).join("."); break }
+  if (PUBLIC_SUFFIXES.has(bare)) return `is a public suffix (${bare}), which names no site`
+  if (labels.length === 2 && EFFECTIVE_SLD.has(labels[0]) && /^[a-z]{2}$/.test(labels[1])) return `is an effective-TLD rule (${bare}), which names no site`
+  if (suffix && bare === suffix) return `is a public suffix (${suffix}), which names no site`
+  for (const listed of SHARED_HOSTS) if (bare === listed || bare.endsWith(`.${listed}`)) return `is a shared host (${listed}), which anyone can claim`
+  for (const listed of TRACKER_HOSTS) if (bare === listed || bare.endsWith(`.${listed}`)) return `is a tracker (${listed}), which is no source's destination`
+  return null
+}
+
+/** The characters that turn two placeholders into markup: `!{title}({url})`. */
+const MARKUP_NEIGHBOURS = new Set(["!", "[", "]", "(", ")"])
+
 const STAGE_OUTPUTS = ["journal", "timeline", "proposal:decision", "proposal:fact", "proposal:commitment_open", "proposal:commitment_close", "proposal:procedure", "proposal:person", "proposal:link"]
 const section = (v) => typeof v === "string" && /^section:[A-Z][A-Za-z0-9 ]{0,39}$/.test(v)
 
-function templateProblems(template, where, sourceIds, ns) {
+/** The connector's declared reads, by method: what a step's `with` may not touch. */
+function readByMethod(connector) {
+  const out = new Map()
+  if (plain(connector) && Array.isArray(connector.reads)) for (const read of connector.reads) if (plain(read) && typeof read.method === "string") out.set(read.method, read)
+  return out
+}
+
+function templateProblems(template, where, sourceIds, ns, reads = new Map()) {
   if (!plain(template)) return [`${where} is not an object`]
   const p = []
   const ok = ["id", "title", "summary", "trigger", "extract", "transform", "curate", "outputs", "budget"]
@@ -376,6 +471,9 @@ function templateProblems(template, where, sourceIds, ns) {
     if (typeof step.source !== "string" || !sourceIds.includes(step.source)) p.push(`${at}.source must name one of this plugin's declared sources`)
     if (step.for !== undefined && step.for !== "thread" && step.for !== "unit") p.push(`${at}.for must be "thread" or "unit"`)
     if (plain(step.with)) {
+      // §9.1 C: the read pins these from the confirmed scope, so a template may not replace one.
+      const pinned = new Set(Object.keys(plain(reads.get(step.call)?.scopeInputs) ? reads.get(step.call).scopeInputs : {}))
+      for (const key of Object.keys(step.with)) if (pinned.has(key)) p.push(`${at}.with may not set ${key}: the read pins it from the person's confirmed scope (§9.1 C)`)
       for (const value of JSON.stringify(step.with).matchAll(/\{\{([^}]+)\}\}/g)) {
         const ref = value[1].trim()
         if (!/^(account|since|cursor\.[a-z][a-z0-9_]*|scope\.[a-z][a-z0-9_]*)$/.test(ref)) p.push(`${at}.with uses {{${ref}}}: only binding values are allowed, never item text`)
@@ -394,6 +492,18 @@ function templateProblems(template, where, sourceIds, ns) {
     if (stage.engine === "render") {
       if (!section(stage.into) && stage.into !== "journal" && stage.into !== "timeline") p.push(`${at}.into must be journal, timeline or section:<Heading>`)
       if (typeof stage.line !== "string" || stage.line.length === 0 || stage.line.length > 400) p.push(`${at}.line must be 1 to 400 characters`)
+      else {
+        for (const match of stage.line.matchAll(/\{([^{}]*)\}/g)) {
+          const before = match.index > 0 ? stage.line[match.index - 1] : ""
+          const after = stage.line[match.index + match[0].length] ?? ""
+          for (const [side, neighbour] of [["before", before], ["after", after]]) {
+            if (MARKUP_NEIGHBOURS.has(neighbour)) p.push(`${at}.line: the placeholder ${match[0]} sits next to "${neighbour}" (${side} it), which makes markup. Put a space between them`)
+          }
+        }
+        const literal = stage.line.replace(/\{[^{}]*\}/g, " ")
+        const markup = LINE_MARKUP.find(([pattern]) => pattern.test(literal))
+        if (markup) p.push(`${at}.line carries markup: ${markup[1]}. A line is text; the block's markers are Memory's`)
+      }
       if (!Number.isInteger(stage.max) || stage.max < 1 || stage.max > 50) p.push(`${at}.max must be 1 to 50`)
       if (stage.heading !== undefined && (typeof stage.heading !== "string" || stage.heading.length > 60)) p.push(`${at}.heading must be at most 60 characters`)
       stageOutputs.push(section(stage.into) ? stage.into : stage.into)
