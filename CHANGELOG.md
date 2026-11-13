@@ -6,13 +6,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- Status's `account` (`teamId`, `userId`, `enterpriseId`), from one `auth.test` per sign-in; absent on failure. Shown in the `Account` row.
-- The tools RPC's `status` method (`slack_status`, allowed at every `access`).
-- `slack_mark_read` / `mark_read` (write): Slack's `conversations.mark`. Needs a `:write` scope; `SCOPE_MISSING` without it. Default scopes unchanged.
+- Status's `account` (`teamId`, `userId`, `enterpriseId`), from `auth.test`. Thanks to @domeevans (#18).
+- The tools RPC's `status` method (`slack_status`, allowed at every `access`). Thanks to @domeevans (#18).
+- `slack_mark_read` / `mark_read` (write): Slack's `conversations.mark`. Needs a `:write` scope; `SCOPE_MISSING` without it. Thanks to @domeevans (#18).
 
 ### Changed
 
-- **The plugin reads the Slack token in one place**, `src/slack-api.ts`, only for `auth.test` and `conversations.mark`, and never stores, logs or returns it.
+- **The plugin now reads the Slack token**, in `src/slack-api.ts` only, to call `auth.test` and `conversations.mark`, and never stores, logs or returns it.
 
 ## [0.0.0] - 2026-11-10
 <!-- kit-release: the GitHub release v0.0.0 -->
