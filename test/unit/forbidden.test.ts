@@ -20,8 +20,14 @@ interface Rule {
 /**
  * The one allowed permission hook: the tools RPC's `evaluate` hook. No one is there to answer a script's prompt, so it
  * turns an ask on one of the RPC's own calls in flight into a deny. It only tightens, and leaves every other call alone.
+ * It lives in source-contract's `tools-rpc` transport, which src/host/tools-rpc.ts registers and the build bundles: the
+ * package's entry and the chunks it imports. No file here has a permission hook of its own.
  */
-const EVALUATE_HOOK_FILE = "src/host/tools-rpc.ts"
+function transportFiles(): string[] {
+  const dist = join(REPO, "node_modules", "@we-the-rebel-alliance", "source-contract", "dist")
+  const entry = join(dist, "tools-rpc.js")
+  return [entry, ...[...readFileSync(entry, "utf8").matchAll(/from "\.\/(chunks\/[^"]+)"/g)].map((match) => join(dist, match[1]!))]
+}
 
 const RULES: readonly Rule[] = [
   { name: "ctx.mcp.catalog", pattern: /mcp\.catalog/, example: "await ctx.mcp.catalog()" },
@@ -54,7 +60,6 @@ const RULES: readonly Rule[] = [
     name: "ctx.permission.hook",
     pattern: /permission\.hook/,
     example: "ctx.permission.hook(escalate)",
-    except: { [EVALUATE_HOOK_FILE]: "the tools RPC's one evaluate hook, which only turns an ask on its own script calls in flight into a deny" },
   },
   { name: "@opencode-ai/plugin", pattern: /@opencode-ai\/plugin/, example: "import { tool } from \"@opencode-ai/plugin\"" },
   { name: "@opencode/ai imports", pattern: /(["'`])@opencode\/ai(?:\/[^"'`\s]*)?\1/, example: "import { generate } from \"@opencode/ai/provider\"" },
@@ -103,7 +108,7 @@ describe("forbidden APIs", () => {
   })
 
   test("the tools RPC has exactly one permission hook, the evaluate hook", () => {
-    const lines = readFileSync(join(REPO, EVALUATE_HOOK_FILE), "utf8").split("\n").filter((line) => /permission\.hook/.test(line))
+    const lines = transportFiles().flatMap((file) => readFileSync(file, "utf8").split("\n")).filter((line) => /permission\.hook/.test(line))
     expect(lines.map((line) => line.trim())).toEqual([`const hook = await ctx.permission.hook("evaluate", (evaluation) => {`])
   })
 
