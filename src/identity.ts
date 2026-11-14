@@ -1,6 +1,9 @@
 import type { SlackApi } from "./slack-api.js"
 
-/** The signed-in Slack account, as Slack's `auth.test` names it: ids only, never a name or a token. */
+/**
+ * The signed-in Slack account, as Slack's `auth.test` names it, never a token. Status shows only the ids; the source's
+ * pages and its probe also name the user by `name` and link to the workspace's `host`.
+ */
 export interface Identity {
   /** The workspace, `T…` (an organisation-wide install answers with its `E…` id). */
   readonly teamId: string
@@ -8,11 +11,19 @@ export interface Identity {
   readonly userId: string
   /** The Enterprise Grid organisation, `E…`; absent for a workspace outside a grid. */
   readonly enterpriseId?: string
+  /** The user's name, as `auth.test`'s `user` gives it; absent when Slack gives none. */
+  readonly name?: string
+  /** The workspace's address, such as `example.slack.com`, from `auth.test`'s `url`; absent when Slack gives none. */
+  readonly host?: string
 }
 
 const TEAM_ID = /^[TE][A-Z0-9]{2,20}$/
 const USER_ID = /^[UW][A-Z0-9]{2,20}$/
 const ENTERPRISE_ID = /^E[A-Z0-9]{2,20}$/
+/** A workspace's address in `auth.test`'s `url`: `https://<name>.slack.com/` or an Enterprise Grid one. */
+const WORKSPACE_URL = /^https:\/\/([a-z0-9][a-z0-9-]*\.(?:enterprise\.)?slack\.com)\/?$/i
+/** A name `auth.test` gives: one line, without control characters. */
+const NAME = /^[^\u0000-\u001f\u007f]{1,200}$/
 /** How long a failed `auth.test` is not tried again for the same credential. */
 const RETRY_MS = 60_000
 /**
@@ -30,11 +41,19 @@ function within<T>(work: Promise<T | undefined>, ms: number): Promise<T | undefi
 
 /** The identity in an `auth.test` answer, or undefined when it does not have one in Slack's shape. */
 export function identityOf(body: Readonly<Record<string, unknown>>): Identity | undefined {
-  const { team_id: teamId, user_id: userId, enterprise_id: enterpriseId } = body
+  const { team_id: teamId, user_id: userId, enterprise_id: enterpriseId, user, url } = body
   if (typeof teamId !== "string" || !TEAM_ID.test(teamId) || typeof userId !== "string" || !USER_ID.test(userId)) return undefined
-  if (enterpriseId === undefined || enterpriseId === null || enterpriseId === "") return { teamId, userId }
-  if (typeof enterpriseId !== "string" || !ENTERPRISE_ID.test(enterpriseId)) return undefined
-  return { teamId, userId, enterpriseId }
+  const grid = enterpriseId === undefined || enterpriseId === null || enterpriseId === "" ? undefined : enterpriseId
+  if (grid !== undefined && (typeof grid !== "string" || !ENTERPRISE_ID.test(grid))) return undefined
+  const name = typeof user === "string" && NAME.test(user.trim()) ? user.trim() : undefined
+  const host = typeof url === "string" ? WORKSPACE_URL.exec(url)?.[1]?.toLowerCase() : undefined
+  return {
+    teamId,
+    userId,
+    ...(grid === undefined ? {} : { enterpriseId: grid as string }),
+    ...(name === undefined ? {} : { name }),
+    ...(host === undefined ? {} : { host }),
+  }
 }
 
 /**

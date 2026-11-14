@@ -3,9 +3,10 @@ import { SERVER } from "./defaults.js"
 import { registerAppIntegration, resolveClient, sameClient, serverNamer, type ClientState } from "./connect.js"
 import { isSupportedHost, isTestedHost } from "./host-version.js"
 import { METHODS, registerToolsRpc } from "./host/tools-rpc.js"
-import { eventsMethod, eventsTool, type EventsToolOptions } from "./events.js"
+import { eventsMethod, eventsTool, PAGE_OUTPUT, type EventsToolOptions } from "./events.js"
 import { STATUS_WAIT_MS, workspaceIdentity } from "./identity.js"
 import { markReadMethod, markReadTool, type MarkReadOptions } from "./mark-read.js"
+import { probeMethod, threadMethod } from "./source.js"
 import { slackApi } from "./slack-api.js"
 import { statusMethod } from "./status-method.js"
 import { parseOptions } from "./options.js"
@@ -60,14 +61,15 @@ export default Plugin.define({
     let client: ClientState = { invalid: false }
     let bundled: readonly ListedSkill[] = []
     let cleanup = async () => {}
-    // Memory's source of Slack events: a Code Mode tool in the slack namespace, and the tools RPC method events_list.
-    const events: EventsToolOptions | undefined = options === undefined
-      ? undefined
-      : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, status: () => status({ account: false }) }
     // The one Slack Web API client, the only code that reads the Slack token: auth.test for status's account, and
     // conversations.mark for mark_read. It uses only the plugin's own server's sign-in.
     const api = slackApi({ mcp: ctx.mcp, connection: ctx.integration.connection, owned: () => options !== undefined && !nameInUse })
     const identity = workspaceIdentity(api)
+    // The slack.workspace source (package.json's sources): a Code Mode tool in the slack namespace, and the tools RPC
+    // methods events_list, probe and thread_read. Its account and owner are status's, from the same auth.test.
+    const events: EventsToolOptions | undefined = options === undefined
+      ? undefined
+      : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, identity: () => identity.get(), status: () => status({ account: false }) }
     const marking: MarkReadOptions | undefined = options === undefined ? undefined : { permission: ctx.permission, api, status: () => status({ account: false }) }
 
     if (options !== undefined) {
@@ -180,7 +182,7 @@ export default Plugin.define({
       : await registerToolsRpc(ctx, {
         methods: events === undefined || marking === undefined
           ? METHODS
-          : [...METHODS, eventsMethod(events), markReadMethod(marking), statusMethod(() => status())],
+          : [...METHODS, eventsMethod(events), probeMethod(events), threadMethod(events, PAGE_OUTPUT), markReadMethod(marking), statusMethod(() => status())],
         mcp: {
           server: SERVER,
           managed: () => !nameInUse,

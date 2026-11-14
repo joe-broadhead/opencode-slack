@@ -1,7 +1,7 @@
 import type { Plugin } from "@opencode/plugin"
 import type { Access } from "./options.js"
 import { SERVER } from "./defaults.js"
-import { EVENTS_LIST } from "./host/events-list.js"
+import { EVENTS_LIST, PROBE } from "@we-the-rebel-alliance/source-contract/events"
 import { KNOWN_TOOLS, MARK_READ, STATUS_METHOD } from "./tools.js"
 
 type AgentEditor = Parameters<Parameters<Plugin.Context["agent"]["transform"]>[0]>[0]
@@ -33,6 +33,8 @@ export function defaultRules(access: Access = "all"): Rule[] {
     ...READ_LIKE.map((tool) => rule(`${SERVER}_${tool}`, "allow")),
     // The plugin's own events_list only reads, and Memory's collector runs it with no one there.
     rule(`${SERVER}_${EVENTS_LIST}`, "allow"),
+    // Its probe names the signed-in workspace and user and reads no content.
+    rule(`${SERVER}_${PROBE}`, "allow"),
     // The tools RPC's status method reads only the plugin's own status and the signed-in account's ids.
     rule(`${SERVER}_${STATUS_METHOD}`, "allow"),
     ...OTHER_TOOLS.map((tool) => rule(`${SERVER}_${tool}`, other)),

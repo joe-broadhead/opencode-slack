@@ -401,6 +401,8 @@ describe("formatStatus", () => {
     expect(formatStatus(buildStatus(input({ account })))).toContain("Account: workspace T0TEAM0001, user U0USER0001\n")
     expect(formatStatus(buildStatus(input({ account: { ...account, enterpriseId: "E0GRID0001" } }))))
       .toContain("Account: workspace T0TEAM0001, user U0USER0001, Enterprise Grid E0GRID0001\n")
+    // The name and address auth.test also gives are the source's, for its pages: status shows only the ids.
+    expect(buildStatus(input({ account: { ...account, name: "sam", host: "acme.slack.com" } })).account).toEqual(account)
   })
 
   test("an account is shown only while connected", () => {

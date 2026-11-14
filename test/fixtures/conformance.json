@@ -1,0 +1,28 @@
+{
+  "$comment": "Slack's answers for the source-contract conformance kit (test/support/conformance.ts), offline: auth.test's identity, the user's profile, and slack_read_channel and slack_read_thread messages, written the way Slack's server writes them. No live call is made. Every workspace, channel, name and message is invented; the signed-in user is the placeholder U00CURRENTUSER, and the other members are Slack's documented example ids.",
+  "now": "2026-11-13T12:00:00.000Z",
+  "authTest": { "ok": true, "url": "https://example.slack.com/", "team": "Example Workspace", "user": "pilot.owner", "team_id": "T0EXAMPLE01", "user_id": "U00CURRENTUSER" },
+  "profile": "# User profile\n**Real Name:** Pilot Owner\n**Display Name:** pilot\n**User ID:** U00CURRENTUSER\n**Team ID:** T0EXAMPLE01",
+  "optionChannels": ["C0EXAMPLE01", "D0EXAMPLE02"],
+  "channels": {
+    "C0EXAMPLE01": [
+      { "ts": "1794477600.000100", "user": "U012AB3CD", "name": "Ama Mensah", "text": "Postgres or SQLite for the queue?", "replies": 2 },
+      { "ts": "1794477700.000100", "user": "U00CURRENTUSER", "name": "Pilot Owner", "text": "Let's go with Postgres.", "thread": "1794477600.000100" },
+      { "ts": "1794481200.000100", "user": "W012A3CDE", "name": "Kofi Boateng", "text": "The staging password is: Qv7mZr2pLx9T" },
+      { "ts": "1794488400.000100", "user": "U012AB3CD", "name": "Ama Mensah", "text": "Release notes are drafted.\nSecond line." }
+    ],
+    "D0EXAMPLE02": [
+      { "ts": "1794484800.000100", "user": "W012A3CDE", "name": "Kofi Boateng", "text": "Can you review the migration plan?" }
+    ],
+    "C0EXAMPLE03": [
+      { "ts": "1794485000.000100", "user": "U012AB3CD", "name": "Ama Mensah", "text": "A channel nobody confirmed." }
+    ]
+  },
+  "threads": {
+    "C0EXAMPLE01:1794477600.000100": [
+      { "ts": "1794477600.000100", "user": "U012AB3CD", "name": "Ama Mensah", "text": "Postgres or SQLite for the queue?", "replies": 2 },
+      { "ts": "1794477700.000100", "user": "U00CURRENTUSER", "name": "Pilot Owner", "text": "Let's go with Postgres.", "thread": "1794477600.000100" },
+      { "ts": "1794477800.000100", "user": "W012A3CDE", "name": "Kofi Boateng", "text": "Agreed. I'll send the migration plan by Friday.", "thread": "1794477600.000100" }
+    ]
+  }
+}

@@ -76,10 +76,11 @@
     "test:host": "bun test test/host",
     "test:pack": "bun test test/pack",
     "drift": "bun scripts/drift.ts",
-    "check": "npm run typecheck && node scripts/check-copies.mjs && npm run build && npm test && npm run test:kit && npm run test:tui && npm run test:host && npm run test:pack && npm run icons && npm run actionlint",
+    "check": "npm run typecheck && node scripts/check-copies.mjs && npm run build && npm test && npm run conformance && npm run test:kit && npm run test:tui && npm run test:host && npm run test:pack && npm run icons && npm run actionlint",
     "icons": "node scripts/check-icons.mjs",
     "actionlint": "node scripts/check-actionlint.mjs",
-    "capture": "node scripts/capture-tools.mjs"
+    "capture": "node scripts/capture-tools.mjs",
+    "conformance": "bun scripts/conformance.ts"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
@@ -97,6 +98,61 @@
     "esbuild": "0.28.2",
     "solid-js": "1.9.17",
     "typescript": "5.9.3"
+  },
+  "sources": {
+    "contractVersion": 1,
+    "rpc": "slack.workspace.tools",
+    "probe": {
+      "action": "slack_probe"
+    },
+    "items": [
+      {
+        "id": "slack.workspace",
+        "kind": "events",
+        "reads": "message",
+        "tool": "events_list",
+        "input": {
+          "source": "slack"
+        },
+        "accounts": {
+          "named": false
+        },
+        "scope": {
+          "keys": [
+            "channels"
+          ],
+          "describe": "The channels and direct messages to read."
+        },
+        "details": [
+          {
+            "id": "slack.workspace.thread",
+            "tool": "thread_read",
+            "from": [
+              "thread"
+            ]
+          }
+        ],
+        "permission": {
+          "events": "slack_events_list",
+          "operations": [
+            "slack_read_user_profile",
+            "slack_read_channel",
+            "slack_read_thread"
+          ],
+          "identity": [
+            "slack_read_user_profile"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 65536,
+        "urlHosts": [
+          "*.slack.com"
+        ]
+      }
+    ]
   },
   "jelly": {
     "title": "Slack",

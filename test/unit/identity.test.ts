@@ -1,10 +1,14 @@
-// Who is signed in: Slack's auth.test, read once per credential through the Web API client, for status. Every id below
-// is invented.
+// Who is signed in: Slack's auth.test, read once per credential through the Web API client, for status and the source's
+// account and owner. Every id below is invented.
 import { describe, expect, test } from "bun:test"
 import { identityOf, STATUS_WAIT_MS, workspaceIdentity } from "../../src/identity.js"
 import type { SlackApi, SlackApiResult } from "../../src/slack-api.js"
 
 const AUTH_TEST = { ok: true, url: "https://acme.slack.com/", team: "Acme", user: "sam", team_id: "T0TEAM0001", user_id: "U0USER0001", is_enterprise_install: false }
+
+/** The ids status shows, and the name and workspace address the source's pages use, as auth.test above gives them. */
+const IDS = { teamId: AUTH_TEST.team_id, userId: AUTH_TEST.user_id }
+const NAMED = { name: "sam", host: "acme.slack.com" }
 
 /** A Web API client over one credential id that answers auth.test with `answer`, and counts the calls. */
 function fakeApi(answers: (() => SlackApiResult)[], credential: () => string | undefined = () => "crd_one") {
@@ -25,12 +29,17 @@ const failed = (error: string): (() => SlackApiResult) => () => ({ ok: false, er
 
 describe("identityOf", () => {
   test("reads the team, the user and, on an Enterprise Grid workspace, the enterprise", () => {
-    expect(identityOf(AUTH_TEST)).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001" })
-    expect(identityOf({ ...AUTH_TEST, enterprise_id: "E0GRID0001" })).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001", enterpriseId: "E0GRID0001" })
+    expect(identityOf(AUTH_TEST)).toEqual({ ...IDS, ...NAMED })
+    expect(identityOf({ ...AUTH_TEST, enterprise_id: "E0GRID0001" })).toEqual({ ...IDS, enterpriseId: "E0GRID0001", ...NAMED })
+  })
+
+  test("leaves out a name or an address that is not one", () => {
+    expect(identityOf({ ...AUTH_TEST, user: "two\nlines", url: "https://example.com/" })).toEqual(IDS)
+    expect(identityOf({ ...AUTH_TEST, user: undefined, url: "https://acme.enterprise.slack.com/" })).toEqual({ ...IDS, host: "acme.enterprise.slack.com" })
   })
 
   test("leaves out an empty enterprise id, as Slack sends for a workspace outside a grid", () => {
-    expect(identityOf({ ...AUTH_TEST, enterprise_id: "" })).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001" })
+    expect(identityOf({ ...AUTH_TEST, enterprise_id: "" })).toEqual({ ...IDS, ...NAMED })
   })
 
   test.each([
@@ -53,7 +62,7 @@ describe("workspaceIdentity", () => {
     expect(await identity.get(10)).toBeUndefined()
     expect(await identity.get(10)).toBeUndefined()
     answer({ ok: true, credential: "crd_one", body: AUTH_TEST })
-    expect(await identity.get(10)).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001" })
+    expect(await identity.get(10)).toEqual({ ...IDS, ...NAMED })
     expect(calls).toEqual(["auth.test"])
   })
 
@@ -64,8 +73,8 @@ describe("workspaceIdentity", () => {
   test("calls auth.test once per credential", async () => {
     const { api, calls } = fakeApi([ok(AUTH_TEST)])
     const identity = workspaceIdentity(api)
-    expect(await identity.get()).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001" })
-    expect(await identity.get()).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001" })
+    expect(await identity.get()).toEqual({ ...IDS, ...NAMED })
+    expect(await identity.get()).toEqual({ ...IDS, ...NAMED })
     expect(calls).toEqual(["auth.test"])
   })
 
@@ -82,7 +91,7 @@ describe("workspaceIdentity", () => {
     const identity = workspaceIdentity(api)
     expect(await identity.get()).toMatchObject({ teamId: "T0TEAM0001" })
     credential = "crd_two"
-    expect(await identity.get()).toEqual({ teamId: "T0TEAM0002", userId: "U0USER0002" })
+    expect(await identity.get()).toMatchObject({ teamId: "T0TEAM0002" })
     expect(calls).toEqual(["auth.test", "auth.test"])
   })
 
@@ -105,7 +114,7 @@ describe("workspaceIdentity", () => {
     expect(await identity.get()).toBeUndefined()
     expect(calls).toEqual(["auth.test"])
     now += 60_000
-    expect(await identity.get()).toEqual({ teamId: "T0TEAM0001", userId: "U0USER0001" })
+    expect(await identity.get()).toEqual({ ...IDS, ...NAMED })
     expect(calls).toEqual(["auth.test", "auth.test"])
   })
 

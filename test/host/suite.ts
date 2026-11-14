@@ -219,9 +219,11 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       test("describes every known tool with its class and live schema, and the plugin's own methods; no unknown tool is a method", async () => {
         const { value } = await script("describe", {})
         expect(value.id).toBe(TOOLS_RPC_ID)
-        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "mark_read", "status"])
-        expect(value.methods.slice(-3)).toMatchObject([
+        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "probe", "thread_read", "mark_read", "status"])
+        expect(value.methods.slice(-5)).toMatchObject([
           { name: "events_list", kind: "plugin", class: "read", action: "slack_events_list", available: true },
+          { name: "probe", kind: "plugin", class: "read", action: "slack_probe", available: true },
+          { name: "thread_read", kind: "plugin", class: "read", action: "slack_slack_read_thread", available: true },
           { name: "mark_read", kind: "plugin", class: "write", action: "slack_mark_read", available: true },
           { name: "status", kind: "plugin", class: "read", action: "slack_status", available: true },
         ])
@@ -295,7 +297,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
 
       test("describe with a session reports each method's permission; without one it omits it", async () => {
         const { value } = await script("describe", { sessionID: sessions.build })
-        const expected = Object.fromEntries([...METHODS.map((method) => [method.name, "allow"]), ["events_list", "allow"], ["mark_read", "allow"], ["status", "allow"]])
+        const expected = Object.fromEntries([...METHODS.map((method) => [method.name, "allow"]), ["events_list", "allow"], ["probe", "allow"], ["thread_read", "allow"], ["mark_read", "allow"], ["status", "allow"]])
         expect(Object.fromEntries(value.methods.map((method: { name: string; permission: string }) => [method.name, method.permission]))).toEqual(expected)
         const plain = (await script("describe", {})).value
         expect(plain.methods.every((method: object) => !Object.hasOwn(method, "permission"))).toBe(true)
@@ -349,14 +351,18 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(value.methods.find((method: { name: string }) => method.name === "events_list")).toMatchObject({ available: false, reason: "SERVER_NAME_IN_USE" })
       })
 
-      test("events_list reads through OpenCode's own connection, and reports an answer it cannot read with its own code", async () => {
+      // events_list and probe name the account from status's auth.test (source-contract: content reads never assert the
+      // identity read). This host has no Slack sign-in, so neither calls a Slack tool, and probe's own identity read
+      // reaches the fake, whose answer is not a profile.
+      test("events_list names the account from auth.test, and probe reads the profile through OpenCode's own connection", async () => {
         const from = host.toolCalls().length
-        // The fake answers every tool with its name and arguments, not with a Slack profile.
         const result = await run("build", "events_list", {})
-        expect(result).toMatchObject({ type: "failed", code: "UPSTREAM_UNREADABLE" })
-        expect(result.message).toContain("UPSTREAM_UNREADABLE: Slack's slack_read_user_profile answered in a shape events_list does not read.")
-        expect(since(from)).toEqual(["slack_read_user_profile"])
+        expect(result).toMatchObject({ type: "failed", code: "UNAVAILABLE" })
+        expect(result.message).toContain("UNAVAILABLE: Slack's auth.test did not name the signed-in workspace and user.")
         expect(await run("build", "events_list", { limit: 0 })).toMatchObject({ type: "failed", code: "INPUT_INVALID" })
+        expect(await run("build", "probe", { scope: {} })).toMatchObject({ type: "failed", code: "INPUT_INVALID" })
+        expect(await run("build", "probe", {})).toMatchObject({ type: "failed", code: "UNAVAILABLE" })
+        expect(since(from)).toEqual([])
       })
 
       test("without a Slack app client ID, refuses with CLIENT_ID_MISSING and /slack-status's next step", async () => {

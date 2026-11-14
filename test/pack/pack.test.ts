@@ -31,7 +31,9 @@ afterAll(() => {
 }, { timeout: 120_000 })
 
 const MAX_ENTRIES = 50
-const MAX_UNPACKED_BYTES = 160 * 1024
+// 192 KiB: Slack's logo PNGs, and source-contract's events, cursor and tools-rpc modules bundled into dist/index.js
+// with package.json's sources declaration (it was 160 KiB before the source adopted source-contract).
+const MAX_UNPACKED_BYTES = 192 * 1024
 // The host packages OpenCode 2.2.3 provides to plugins, at the versions pinned for development.
 const HOST_PACKAGES = ["@opencode/plugin", "@opentui/core", "@opentui/solid", "solid-js"]
 const SERVER_MODULES = [/^node:/, /^@opencode\/plugin(?:\/|$)/]
@@ -209,7 +211,7 @@ describe.each(HOST_VERSIONS)("the installed package on stock opencode %s", (vers
       expect(build?.permissions.slice(at + 1, at + 1 + rules.length)).toEqual(rules)
       expect((await host.client.skill.list({ location })).data.map((skill) => skill.id)).toContain("slack-search")
       const tools = (await host.client.rpc.call({ rpcID: TOOLS_RPC_ID, method: "describe", location, input: {} })).output as { methods: { name: string }[] }
-      expect(tools.methods.map((method) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "mark_read", "status"])
+      expect(tools.methods.map((method) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "probe", "thread_read", "mark_read", "status"])
       const paths = (await host.client.rpc.call({ rpcID: "slack.test.probe", method: "paths", location, input: {} })).output as Record<string, string>
       expect(Object.keys(paths).length).toBeGreaterThan(0)
       expect(Object.entries(paths).filter(([, path]) => !path.startsWith(host.root + sep))).toEqual([])
