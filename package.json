@@ -78,7 +78,8 @@
     "drift": "bun scripts/drift.ts",
     "check": "npm run typecheck && node scripts/check-copies.mjs && npm run build && npm test && npm run test:kit && npm run test:tui && npm run test:host && npm run test:pack && npm run icons && npm run actionlint",
     "icons": "node scripts/check-icons.mjs",
-    "actionlint": "node scripts/check-actionlint.mjs"
+    "actionlint": "node scripts/check-actionlint.mjs",
+    "capture": "node scripts/capture-tools.mjs"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
