@@ -2,10 +2,24 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.2] - 2026-11-14
+
+### Added
+
+- Jelly: the Slack app step's `hostClient` declares `metadataOption: "oauth.auth_server_metadata_url"`, so a hosted
+  Jelly gives the plugin the address of its Jelly ID's OAuth metadata for its Slack app, whose token endpoint adds the
+  client secret. A sign-in made through Jelly's relay then renews after Slack's 12 hours, completing #20 in Jelly. Needs
+  a Jelly whose host client schema has `metadataOption`; an older one refuses the key.
+- `test/fixtures/live-tools.json`, Slack's tool list for a signed-in user, captured live on 14 November 2026, and a test
+  that fails when the declaration and that list disagree. The declaration already matches it: 27 served tools plus the
+  plugin's own `events_list` and `mark_read`.
 
 ### Changed
 
+- `package.json` is `"private": true`: nothing can be published to npm. Installs from the Git tag are unaffected.
+- The pack budget is 160 KiB, for Slack's logo PNGs.
+- `docs/jelly.md` gives the relay's true address: `<Jelly ID origin>/connect/callback`, at Jelly ID's origin, not the
+  Jelly host's.
 - The icon is now Slack's own mark, the 54×54 octothorpe that slack.com/media-kit serves, unmodified, in place of the family's drawn mark; `opencode.vendor.mark` is `true`.
 
 ## [0.0.1] - 2026-11-13

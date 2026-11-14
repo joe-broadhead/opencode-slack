@@ -1,0 +1,27 @@
+{
+  "captures": [
+    {
+      "fixture": "live-tools.json",
+      "evidence": "live-observed",
+      "listedAt": "2026-11-14",
+      "server": "slack",
+      "endpoint": "https://mcp.slack.com/mcp",
+      "source": "scripts/capture-tools.mjs, signed in",
+      "host": "2.2.6",
+      "protocol": "2025-06-18",
+      "count": 27,
+      "annotations": "every tool",
+      "schemas": "recorded",
+      "digest": {
+        "algorithm": "sha256",
+        "of": "canonical JSON of the recorded tools, sorted by name",
+        "value": "41a5341728c6371d8baffa5a6bfd83c70edd50e4fbcfa9dd2a7a56627b493903"
+      }
+    }
+  ],
+  "live": {
+    "fixture": "live-tools.json",
+    "listedAt": "2026-11-14"
+  },
+  "note": "Digests are for drift detection, not a security signature. live names the newest live-observed capture, which the release gate requires to be at most 14 days old."
+}

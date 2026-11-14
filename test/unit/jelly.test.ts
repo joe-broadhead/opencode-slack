@@ -16,7 +16,7 @@ import { fakeHost } from "./fakes.js"
  * standard; the tests below add what only Slack declares.
  */
 
-type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; hostClient?: { id: string; option: string }; help?: { url: string; label: string }; relay?: Record<string, string> }
+type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; hostClient?: { id: string; option: string; metadataOption?: string }; help?: { url: string; label: string }; relay?: Record<string, string> }
 const ROOT = new URL("../../", import.meta.url)
 const jelly = readPackage(ROOT).jelly as Declaration & { signIns: SignIn[] }
 
@@ -61,8 +61,9 @@ describe("the jelly declaration", () => {
     test("declare the Slack app's /connect entry, then the server that waits for it, under the names /connect shows", () => {
       expect(jelly.signIns.length).toBe(2)
       expect(app).toMatchObject({ id: "app", label: APP_NAME, integration: "slack-app" })
-      // A Jelly host's own Slack app goes where presetBy looks, so the step is done there.
-      expect(app?.hostClient).toEqual({ id: "slack", option: "oauth.client_id" })
+      // A Jelly host's own Slack app goes where presetBy looks, so the step is done there, and its Jelly ID's token
+      // proxy goes where the plugin reads the OAuth server metadata, so a sign-in through the relay renews.
+      expect(app?.hostClient).toEqual({ id: "slack", option: "oauth.client_id", metadataOption: "oauth.auth_server_metadata_url" })
       expect(app?.presetBy).toBe("oauth.client_id")
       expect(slack).toEqual({ id: "slack", label: SERVER_DISPLAY_NAME, server: SERVER, after: "app", relay: {} })
     })
@@ -72,7 +73,8 @@ describe("the jelly declaration", () => {
       const doc = readFileSync(new URL("../../docs/jelly.md", import.meta.url), "utf8")
       expect(slack?.relay).toEqual({})
       expect(appManifest.oauth_config.redirect_urls).toEqual(["http://localhost:8765/callback"])
-      expect(doc).toContain("https://host.example/connect/callback")
+      expect(doc).toContain("`<Jelly ID origin>/connect/callback`")
+      expect(doc).not.toContain("host.example/connect/callback")
     })
 
     test("the app step is preset by the option that pins the client, so that client is used and no entry is registered", async () => {
