@@ -62,7 +62,8 @@
     "vendor": {
       "id": "slack",
       "name": "Slack",
-      "domain": "slack.com"
+      "domain": "slack.com",
+      "mark": true
     }
   },
   "scripts": {

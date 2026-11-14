@@ -2,7 +2,9 @@
 
 An [OpenCode](https://opencode.ai) plugin that connects Slack's hosted MCP server, so OpenCode agents can search and read Slack for you.
 
-Unofficial; not affiliated with Slack. Slack is a trademark of Slack Technologies, LLC, a Salesforce company.
+Unofficial; not affiliated with Slack.
+
+Slack is a trademark of Slack Technologies, LLC; this unofficial plugin is not endorsed by them.
 
 ## Requirements
 

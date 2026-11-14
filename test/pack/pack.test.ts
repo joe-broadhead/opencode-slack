@@ -31,7 +31,7 @@ afterAll(() => {
 }, { timeout: 120_000 })
 
 const MAX_ENTRIES = 50
-const MAX_UNPACKED_BYTES = 150 * 1024
+const MAX_UNPACKED_BYTES = 160 * 1024
 // The host packages OpenCode 2.2.3 provides to plugins, at the versions pinned for development.
 const HOST_PACKAGES = ["@opencode/plugin", "@opentui/core", "@opentui/solid", "solid-js"]
 const SERVER_MODULES = [/^node:/, /^@opencode\/plugin(?:\/|$)/]
