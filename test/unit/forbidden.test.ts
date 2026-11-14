@@ -41,7 +41,12 @@ const RULES: readonly Rule[] = [
     except: { "test/host/fake-slack-mcp.ts": "the MCP handshake's server capabilities, not plugin config" },
   },
   { name: "responsePolicy", pattern: /responsePolicy/, example: "responsePolicy: \"text-only\"," },
-  { name: "Plugin.image and profile images", pattern: /\bimage\b|PROFILE_IMAGE/, example: "Plugin.define({ id, image: PROFILE_IMAGE, setup })" },
+  {
+    name: "Plugin.image and profile images",
+    pattern: /\bimage\b|PROFILE_IMAGE/,
+    example: "Plugin.define({ id, image: PROFILE_IMAGE, setup })",
+    except: { "test/fixtures/live-tools.json": "Slack's own tool descriptions, captured live, which mention images in messages and files" },
+  },
   { name: "ctx.generate.text", pattern: /generate\.text/, example: "await ctx.generate.text(prompt)" },
   { name: "experimental.policies", pattern: /experimental\.policies/, example: "experimental.policies.push(policy)" },
   { name: "ctx.experimental.artifact", pattern: /\bexperimental\s*\??\.\s*artifact\b/, example: "await ctx.experimental?.artifact.create(file)" },
