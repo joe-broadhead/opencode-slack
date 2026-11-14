@@ -1,6 +1,7 @@
 {
   "name": "@joe-broadhead/opencode-slack",
   "version": "0.0.1",
+  "private": true,
   "description": "Unofficial OpenCode plugin for Slack",
   "keywords": [
     "opencode",
