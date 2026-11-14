@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The `slack.workspace` source under source-contract version 1: a top-level `sources` key in `package.json` (one
+  `events` source reading `message`, scope key `channels`, the detail read `slack.workspace.thread`, the operations
+  `slack_read_user_profile`, `slack_read_channel` and `slack_read_thread`, identity `slack_read_user_profile`, private,
+  free, 64 KB a page, `*.slack.com` links, the tools RPC `slack.workspace.tools` and the probe action `slack_probe`).
+  For jelly, Memory and Artifacts: read the declaration from the installed package; every read runs under the grant
+  it derives.
+- Tools RPC methods `probe` (`slack_probe`, allowed at every `access`): the signed-in workspace and user, and no
+  content; and `thread_read` (`slack_slack_read_thread`): one listed event's thread, from its `thread` field, refused
+  with `PERMISSION_DENIED` when the channel is outside the confirmed scope.
+- `events_list` takes `scope: { channels }`, within the `events.channels` option when that is set. Its pages name the
+  `plugin`, echo the `scope`, list a message that holds a secret in `refused[]` (never its text), and carry
+  `gap: { reason: "expired", since }` when a cursor is more than 90 days old.
+- `npm run check` runs source-contract's conformance kit over `events_list`, `probe` and `thread_read`, offline, and
+  writes `reports/conformance-report.json` for the release to attach.
+
+### Changed
+
+- The tools RPC transport and the `events_list` contract are source-contract's modules (`tools-rpc`, `events`,
+  `cursor`), pinned as `github:we-the-rebel-alliance/source-contract#v0.1.0` (commit `8ace21d`) and bundled into
+  `dist/index.js`; there is still no runtime dependency. Same RPC id, methods and answers otherwise.
+- For Memory and jelly: `events_list`'s account and owner come from Slack's `auth.test`, as status's account does,
+  so it no longer reads the profile; the owner's label is the user's Slack name from `auth.test` rather than the
+  profile's full name. Without an `auth.test` answer the call is `UNAVAILABLE` (new code), or status's own code.
+- For Memory: the cursor is source-contract's version 2, bound to the workspace and scope; pass it back with the same
+  scope. A version 1 cursor is read once, for a call without a scope. A page holds at most 64 KB (it was 900 KB) and
+  stops early with `more: true`.
+
+### Removed
+
+- `src/host/tools-rpc.ts`'s shared part and `src/host/events-list.ts`, and their `check-copies` pins: the package
+  replaces them.
+
 ## [0.0.2] - 2026-11-14
 
 ### Added
