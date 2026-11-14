@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.2] - 2026-11-14
 
 ### Added
 
@@ -16,6 +16,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- `package.json` is `"private": true`: nothing can be published to npm. Installs from the Git tag are unaffected.
+- The pack budget is 160 KiB, for Slack's logo PNGs.
 - `docs/jelly.md` gives the relay's true address: `<Jelly ID origin>/connect/callback`, at Jelly ID's origin, not the
   Jelly host's.
 - The icon is now Slack's own mark, the 54×54 octothorpe that slack.com/media-kit serves, unmodified, in place of the family's drawn mark; `opencode.vendor.mark` is `true`.
