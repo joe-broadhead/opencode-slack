@@ -133,7 +133,10 @@ describe("dms_list", () => {
 
   test("keeps the conversations since a time, at most a limit, and refuses a bad input before any read", async () => {
     expect((await dms(options().web, { since: "2026-11-12T12:00:00Z" })).data.items.map((item) => item.id)).toEqual(["D0EXAMPLE02"])
-    expect((await dms(options().web, { limit: 1 })).data.items).toHaveLength(1)
+    // Only `limit` conversations are read: one history and one info call each, never one per listed conversation.
+    const capped = options()
+    expect((await dms(capped.web, { limit: 1 })).data.items.map((item) => item.id)).toEqual(["D0EXAMPLE02"])
+    expect(capped.calls.filter((method) => method === "conversations.history" || method === "conversations.info")).toEqual(["conversations.history", "conversations.info"])
     const { web, calls } = options()
     await expect(dms(web, { limit: 31 })).rejects.toThrow(/^INPUT_INVALID: /)
     await expect(dms(web, { cursor: "x" })).rejects.toThrow(/^INPUT_INVALID: /)

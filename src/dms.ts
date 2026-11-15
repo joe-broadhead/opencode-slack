@@ -23,10 +23,9 @@ export const DMS_ACTION = `${SERVER}_${DMS_LIST}`
 /** The inbox output's most items, and the default. */
 const MAX_LIMIT = 30
 const DEFAULT_LIMIT = 20
-/** Pages of 200 conversations listed, and the most conversations whose latest message is read, per call. */
+/** Pages of 200 conversations listed, per call. */
 const LIST_PAGE = 200
 const MAX_LIST_PAGES = 5
-const MAX_CHECKED = 40
 /** How many conversations are read at once, and the most members a group message names. */
 const CONCURRENCY = 4
 const MAX_MEMBERS = 8
@@ -230,7 +229,9 @@ export async function slackDms(readFor: (account: string) => WebRead, signed: Dm
   const read = readFor(who.account)
   const self = who.userId
   // Slack lists conversations in no order of activity: the ones it marks dormant last, then the most recently updated.
-  const listed = (await listConversations(read, self)).sort((a, b) => Number(a.dormant) - Number(b.dormant) || b.updated - a.updated).slice(0, MAX_CHECKED)
+  // Only `limit` of them are read: each costs two Tier 3 calls (conversations.history and conversations.info), so a
+  // snapshot makes at most about 5 + 2 × limit + one per group message and one per name.
+  const listed = (await listConversations(read, self)).sort((a, b) => Number(a.dormant) - Number(b.dormant) || b.updated - a.updated).slice(0, request.limit)
   const latest = (await each(listed, (item) => latestOf(read, item, self)))
     .filter((item): item is Latest => item !== undefined && (request.since === undefined || Number(micros(item.ts) / 1000n) >= request.since))
     .sort((a, b) => (micros(b.ts) > micros(a.ts) ? 1 : micros(b.ts) < micros(a.ts) ? -1 : 0))
