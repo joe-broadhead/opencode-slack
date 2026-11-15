@@ -82,6 +82,15 @@ async function failure(options: Pick<WebReadOptions, "status">, name: string, me
       `Add ${needed} to the Slack app's user scopes and to the plugin's oauth.scopes if you set them, then sign in to Slack again.`,
     )
   }
+  if (result.error === "feature_not_enabled") {
+    // Slack's Real-time Search (assistant.search.context) is only for apps internal to the workspace or published in
+    // the Slack Marketplace, and never for guests.
+    return eventsError(
+      "FEATURE_NOT_ENABLED",
+      `Slack refused ${method} for ${name}: Real-time Search is not enabled for this Slack app, workspace or user.`,
+      "Use a Slack app that is internal to your workspace or listed in the Slack Marketplace, signed in as a full member rather than a guest, then sign in again.",
+    )
+  }
   if (result.error === "ratelimited") {
     return eventsError("RATE_LIMITED", `Slack rate-limited ${method} for ${name}.`, `Call ${name} again in ${result.retryAfter === undefined ? "a minute" : `${result.retryAfter} seconds`}.`)
   }

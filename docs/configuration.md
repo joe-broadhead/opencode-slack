@@ -567,6 +567,7 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `SCOPE_MISSING` | none: `slack_mark_read`, `mentions_list` or `dms_list` | Add the scope the message names to the Slack app's user scopes and to the plugin's oauth.scopes, then sign in to Slack again. |
 | `UPSTREAM_ERROR` | none: `slack_mark_read`, Slack refused conversations.mark (the message holds Slack's error code) | Check channel_id and ts, and run /slack-status if it keeps failing. |
 | `INPUT_INVALID` | none: the tools RPC's `status` method | Pass an empty object as the input. |
+| `FEATURE_NOT_ENABLED` | none: `mentions_list`, Slack refused Real-time Search (`feature_not_enabled`) | Use a Slack app that is internal to your workspace or listed in the Slack Marketplace, signed in as a full member rather than a guest, then sign in again. |
 | `RATE_LIMITED` | none: `mentions_list` or `dms_list`, Slack kept rate-limiting a Web API read | Call it again after the time the message names. |
 | `UNAVAILABLE` | none: `slack_events_list`, `probe` or `thread_read`, Slack's auth.test named no workspace and user | Run /slack-status; once it shows the Account, call the method again. |
 | `PERMISSION_DENIED` | none: `thread_read`, the thread's channel is outside the confirmed scope | Confirm that channel for this source, or read only threads of the channels already confirmed. |

@@ -56,6 +56,10 @@ describe("the Web API read path", () => {
     await expect(webReader(limited, context, ACCOUNT, "dms_list")("users.info", {})).rejects.toThrow("RATE_LIMITED: Slack rate-limited users.info for dms_list. Next step: Call dms_list again in 120 seconds.")
     const scoped = options({ api: { call: async () => ({ ok: false, error: "missing_scope", needed: "im:history" }) } }).web
     await expect(webReader(scoped, context, ACCOUNT, "dms_list")("conversations.history", {})).rejects.toThrow(/^SCOPE_MISSING: Slack refused conversations\.history: the Slack sign-in lacks the scope im:history\./)
+    const disabled = options({ api: { call: async () => ({ ok: false, error: "feature_not_enabled" }) } }).web
+    await expect(webReader(disabled, context, ACCOUNT, "mentions_list")("assistant.search.context", {})).rejects.toThrow(
+      /^FEATURE_NOT_ENABLED: Slack refused assistant\.search\.context for mentions_list: Real-time Search is not enabled .* Next step: Use a Slack app that is internal to your workspace or listed in the Slack Marketplace/,
+    )
     const skipped = options({ api: { call: async () => ({ ok: false, error: "channel_not_found" }) } }).web
     expect(await webReader(skipped, context, ACCOUNT, "dms_list")("conversations.info", {}, ["channel_not_found"])).toBeUndefined()
   })
