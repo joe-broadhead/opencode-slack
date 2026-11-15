@@ -50,6 +50,13 @@ All notable changes to this project are documented here. The format follows [Kee
   stored with the credential (never the token), and its next step is to sign in again. Until then the two new
   sources answer `SCOPE_MISSING`; the rest works as before. With the new scopes, `slack_read_channel` and
   `slack_read_thread` also read your direct and group messages, without asking at `access: "all"`.
+- The jelly declaration's Slack sign-in declares its eleven scopes, sorted, equal to the default sign-in's, so a
+  Jelly re-asks each person to sign in when they widen, as they do in this release.
+- **For jelly's hosted sign-ins:** add the seven new user scopes above to Jelly's hosted Slack app, and keep that app
+  internal to its workspace or listed in the Slack Marketplace: Slack refuses Real-time Search
+  (`assistant.search.context`, which `mentions_list` uses) to unlisted distributed apps, and limits their new
+  installs to one `conversations.history` request a minute, which `dms_list` needs per conversation. Then everyone
+  signs in again.
 - `SECURITY.md`'s token promise widens to exactly the six read-only Web API calls above, beside `auth.test` and
   `conversations.mark`; `SLACK_API_METHODS` is the list, and a rate-limited answer carries Slack's `Retry-After`.
 - For Memory and jelly: every source's account and owner come from Slack's `auth.test`, as status's account does, so
@@ -70,7 +77,15 @@ All notable changes to this project are documented here. The format follows [Kee
   issued by 0.0.2 or earlier for such an install (or one that named the address or `default`) is refused with
   `CURSOR_INVALID`; start again with `since`.
 - The Web API answers of `mentions_list` and `dms_list` and the Markdown of `slack_list_user_channels` that
-  `channels_list` reads are tested against recorded, invented answers in Slack's documented shapes, not a live Slack.
+  `channels_list` reads are tested against answers that are invented, modelled on Slack's docs, and not
+  live-verified.
+- `mentions_list` uses Slack's Real-time Search (`assistant.search.context`). Only apps internal to the workspace or
+  published in the Slack Marketplace may call it, and guests cannot. It allows 10 requests a minute per user, and one
+  `mentions_list` call makes up to 5. Slack may answer `feature_not_enabled`, which is `FEATURE_NOT_ENABLED` (new
+  code) with a next step. Its keyword search (`sort: timestamp`), the one used, is not gated by the Slack plan;
+  semantic search is.
+- `dms_list` reads only the `limit` most recently updated conversations (20 by default, at most 30), two Tier 3
+  calls each, so a snapshot makes at most about 5 + 2 × `limit` calls plus one per group message and per name.
 
 ### Removed
 

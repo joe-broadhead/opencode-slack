@@ -24,7 +24,7 @@ describe("the jelly declaration", () => {
   // Jelly re-asks a person to sign in only when a declared sign-in's scopes widen (declaration-refresh.ts), so the
   // Slack sign-in declares exactly the scopes the plugin's default sign-in asks for, sorted as Jelly requires.
   test("the Slack sign-in declares the default sign-in's scopes, sorted and unique", () => {
-    const scopes = jelly.signIns.find((signIn) => signIn.id === SERVER)?.scopes
+    const scopes = (jelly.signIns as SignIn[]).find((signIn) => signIn.id === SERVER)?.scopes
     expect(scopes).toEqual([...DEFAULT_SCOPES].sort())
     expect(scopes?.every((scope, index) => index === 0 || scope > scopes[index - 1]!)).toBe(true)
     expect(scopes).toHaveLength(11)
