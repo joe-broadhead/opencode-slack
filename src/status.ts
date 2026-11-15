@@ -1,6 +1,6 @@
 import type { PluginCode } from "./codes.js"
 import { APP_NAME, SERVER_DISPLAY_NAME, type ClientState } from "./connect.js"
-import { EVENTS_LIST } from "@we-the-rebel-alliance/source-contract/events"
+import { EVENTS_LIST } from "./tools.js"
 import type { Identity } from "./identity.js"
 import { APP_MANIFEST_URL, SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
 import type { ParsedOptions } from "./options.js"
@@ -39,6 +39,11 @@ export interface Status {
   /** OpenCode's local listener port for an `https:` callback. */
   readonly callbackPort?: number
   readonly scopes?: readonly string[]
+  /**
+   * The requested scopes Slack did not grant the connected sign-in, as after an update that asks for new ones. Present
+   * only while connected, when OpenCode stored the granted scopes with the credential and one is missing.
+   */
+  readonly missingScopes?: readonly string[]
   readonly asksBefore: readonly string[]
   readonly tools: {
     readonly read: number
@@ -87,6 +92,8 @@ export interface StatusInput {
   readonly shadowedSkills: readonly ListedSkill[]
   /** The signed-in account, when it is known; status shows it only while connected. */
   readonly account?: Identity
+  /** The scopes Slack granted the sign-in, as OpenCode stored them with the credential; undefined when unknown. */
+  readonly granted?: readonly string[]
 }
 
 /** What `/slack-status` and the RPC error say when the host cannot answer. */
@@ -96,7 +103,7 @@ export const UNAVAILABLE = "STATUS_UNAVAILABLE: Slack status is unavailable. Nex
 const asksBeforeOf = (access: Access): readonly string[] => {
   if (access === "all") return []
   const asking = [
-    "searching private channels and reading files",
+    "searching private channels, reading files, and the plugin's mentions_list and dms_list (your mentions and direct messages)",
     "writes: messages, drafts, schedules, reactions, canvases, lists, new conversations and file uploads",
     "Slack tools this plugin does not know yet",
   ]
@@ -149,15 +156,21 @@ const AGENT_FIX = "Put the default rules shown by /slack-status first in each li
 /** The block to paste, as a JSON list with one rule per line. */
 const remedy = (access: Access) => `[\n${defaultRules(access).map((rule) => `  ${quote(rule)}`).join(",\n")}\n]`
 
-/** The next step once connected: unguarded agents first, because they run Slack writes without asking. */
-function connectedNextStep(unguarded: readonly string[], shadowed: readonly ListedSkill[]): string {
+/** What a sign-in that lacks scopes this version asks for has to do: add them to the app, then sign in again. */
+export function scopesNextStep(missing: readonly string[]): string {
+  return `The Slack sign-in lacks ${missing.join(" ")}, which this version asks for. Add ${missing.length > 1 ? "them" : "it"} to your Slack app's user scopes (the manifest at ${APP_MANIFEST_URL} lists them all), then sign in again: run /connect and choose ${SERVER_DISPLAY_NAME}, then press o or Enter (in a terminal, opencode mcp auth ${SERVER}).`
+}
+
+/** The next step once connected: unguarded agents first, because they run Slack writes without asking; then scopes. */
+function connectedNextStep(unguarded: readonly string[], shadowed: readonly ListedSkill[], missing: readonly string[]): string {
   if (unguarded.length > 0) return AGENT_FIX
+  if (missing.length > 0) return scopesNextStep(missing)
   const [skill] = shadowed
   if (skill !== undefined) return `Move or rename the skill at ${skill.path}, so that this plugin's ${skill.id} skill loads, then run opencode reload.`
   return NOTHING_TO_DO
 }
 
-function connection(status: ServerStatus | undefined, unguarded: readonly string[], shadowed: readonly ListedSkill[], toolCount: number) {
+function connection(status: ServerStatus | undefined, unguarded: readonly string[], shadowed: readonly ListedSkill[], toolCount: number, missing: readonly string[]) {
   if (status === undefined) {
     return { state: "failed" as const, message: `The ${SERVER} server is not registered.`, nextStep: "Run opencode reload, then check again." }
   }
@@ -182,7 +195,7 @@ function connection(status: ServerStatus | undefined, unguarded: readonly string
     case "connected":
       return {
         state: "connected" as const, message: `Connected. Slack tools available: ${toolCount}.`,
-        nextStep: connectedNextStep(unguarded, shadowed),
+        nextStep: connectedNextStep(unguarded, shadowed, missing),
       }
   }
 }
@@ -251,10 +264,13 @@ export function buildStatus(input: StatusInput): Status {
     }
   }
   const status = input.servers.find((item) => item.name === SERVER)?.status
-  const connected = connection(status, unguardedAgents, input.shadowedSkills, names.length)
-  if (connected.state !== "connected" || input.account === undefined) return { ...base, ...connected }
+  // Only a connected sign-in whose granted scopes OpenCode stored is compared; unknown is never reported as missing.
+  const missing = status?.status === "connected" && input.granted !== undefined && options !== undefined ? options.scopes.filter((scope) => !input.granted!.includes(scope)) : []
+  const connected = connection(status, unguardedAgents, input.shadowedSkills, names.length, missing)
+  const withScopes = connected.state === "connected" && missing.length > 0 ? { ...base, ...connected, missingScopes: missing } : { ...base, ...connected }
+  if (connected.state !== "connected" || input.account === undefined) return withScopes
   const { teamId, userId, enterpriseId } = input.account
-  return { ...base, ...connected, account: { teamId, userId, ...(enterpriseId === undefined ? {} : { enterpriseId }) } }
+  return { ...withScopes, account: { teamId, userId, ...(enterpriseId === undefined ? {} : { enterpriseId }) } }
 }
 
 /** The next step while no usable Slack app client ID is set: status's, and the tools RPC's for CLIENT_ID_MISSING. */
@@ -316,7 +332,10 @@ export function statusRows(status: Status): { readonly label: string; readonly v
     rows.push({ label: "Client", value: `${status.client.id} (${mode}; ${CLIENT_SOURCE[status.client.source]})` })
   }
   if (status.callback !== undefined) rows.push({ label: "Callback", value: callbackRow(status.callback, status.callbackPort) })
-  if (status.scopes !== undefined) rows.push({ label: "Scopes", value: status.scopes.join(" ") })
+  if (status.scopes !== undefined) {
+    const missing = status.missingScopes === undefined ? "" : ` (the sign-in lacks ${status.missingScopes.join(" ")}: sign in again)`
+    rows.push({ label: "Scopes", value: `${status.scopes.join(" ")}${missing}` })
+  }
   if (status.shadowedSkills.length > 0) {
     rows.push({
       label: "Skills",

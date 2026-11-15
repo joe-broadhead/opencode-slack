@@ -128,7 +128,7 @@ describe("setup with a client ID in the options", () => {
         client_id: "C1",
         redirect_uri: "https://host.example/oauth/return",
         callback_port: 49200,
-        scope: "channels:history channels:read search:read.public users:read",
+        scope: "channels:history channels:read search:read.public users:read search:read.private search:read.im search:read.mpim im:read im:history mpim:read mpim:history",
       },
     })
     expect(await host.status()).toMatchObject({ callback: "https://host.example/oauth/return", callbackPort: 49200 })
@@ -144,7 +144,7 @@ describe("setup with a client ID in the options", () => {
         client_id: "C1",
         redirect_uri: "https://host.example/oauth/return",
         callback_port: 49200,
-        scope: "channels:history channels:read search:read.public users:read",
+        scope: "channels:history channels:read search:read.public users:read search:read.private search:read.im search:read.mpim im:read im:history mpim:read mpim:history",
         auth_server_metadata_url: url,
       },
     })

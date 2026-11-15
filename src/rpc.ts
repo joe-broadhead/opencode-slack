@@ -21,6 +21,7 @@ const status = object({
   callback: text,
   callbackPort: { type: "integer" },
   scopes: texts,
+  missingScopes: texts,
   asksBefore: texts,
   tools: object({
     read: { type: "integer" }, private: { type: "integer" }, file: { type: "integer" }, write: { type: "integer" }, unknown: { type: "integer" }, unknownNames: texts,
