@@ -64,6 +64,19 @@ function sources(setup: Setup, fetch: typeof globalThis.fetch): SlackApiSources 
 }
 
 describe("the Slack Web API client", () => {
+  test("granted reads only the scope list OpenCode stored with the credential, never sending a request", async () => {
+    const { fetch, sent } = fakeFetch(() => json({ ok: true }))
+    const credential = { type: "oauth", access: TOKEN, refresh: REFRESH, expires: Date.now() + 3_600_000, metadata: { scope: "channels:history users:read,im:read" } }
+    const granted = await slackApi(sources({ credential }, fetch)).granted()
+    expect(granted).toEqual(["channels:history", "users:read", "im:read"])
+    expect(JSON.stringify(granted)).not.toContain(TOKEN)
+    expect(sent).toEqual([])
+    expect(await slackApi(sources({}, fetch)).granted()).toBeUndefined()
+    expect(await slackApi(sources({ resolveThrows: true }, fetch)).granted()).toBeUndefined()
+    expect(await slackApi(sources({ owned: false, credential }, fetch)).granted()).toBeUndefined()
+  })
+
+
   test("posts the method to slack.com with the Slack sign-in's token as a bearer header, and returns Slack's answer and the credential's id", async () => {
     const { fetch, sent } = fakeFetch(() => json({ ok: true, team_id: "T0TEAM0001", user_id: "U0USER0001" }))
     const deps = sources({}, fetch)
@@ -118,9 +131,11 @@ describe("the Slack Web API client", () => {
     expect(result).toEqual({ ok: false, error: REQUEST_FAILED })
   })
 
-  test("a rate limit is Slack's ratelimited", async () => {
+  test("a rate limit is Slack's ratelimited, with the wait its Retry-After names", async () => {
     const { fetch } = fakeFetch(() => new Response("", { status: 429, headers: { "retry-after": "30" } }))
-    expect(await slackApi(sources({}, fetch)).call("auth.test", {})).toEqual({ ok: false, error: "ratelimited" })
+    expect(await slackApi(sources({}, fetch)).call("auth.test", {})).toEqual({ ok: false, error: "ratelimited", retryAfter: 30 })
+    const { fetch: unnamed } = fakeFetch(() => new Response("", { status: 429, headers: { "retry-after": "soon" } }))
+    expect(await slackApi(sources({}, unnamed)).call("auth.test", {})).toEqual({ ok: false, error: "ratelimited" })
   })
 
   test("a network failure is request_failed, and its message is never returned", async () => {

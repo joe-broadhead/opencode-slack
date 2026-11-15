@@ -2,20 +2,16 @@
 //   node scripts/check-copies.mjs          check the copies this plugin has
 //   node scripts/check-copies.mjs --print  print each copy's hash, after a change made in every plugin at once
 // Each plugin keeps its own copy, because each bundle and each test suite stands alone. The hashes below name the one
-// version all plugins carry: the tools RPC outside its PLUGIN-SPECIFIC block, the declaration test kit whole, Jelly's
-// setting rules whole, and the events_list source contract whole (only source plugins carry it).
+// version all plugins carry: the declaration test kit whole, Jelly's setting rules whole, and the release kit. The
+// tools RPC and the events_list source contract are no longer copies: they are source-contract's modules, pinned in
+// package.json and bundled into dist/index.js.
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 
-const BEGIN = "// >>> PLUGIN-SPECIFIC >>>"
-const END = "// <<< PLUGIN-SPECIFIC <<<"
-
 const COPIES = [
-  { path: "src/host/tools-rpc.ts", optional: true, sha256: "15d82caa53aaae7ad9efb88dddb97056d3895c4dbf49b8efbb85b743871b2a6d", part: sharedPart },
   { path: "test/support/jelly-kit.ts", optional: false, sha256: "ab599abcf041044c77e7938c3d9a081e00072487a7ec20b654d86c8230951190", part: (text) => text },
   // Jelly's setting rules, restated without zod (the file's header says what it restates and how to update it).
   { path: "test/support/jelly-settings.ts", optional: false, sha256: "966aeac7eddce490da51e8e46780f1fbcfaf9b3e892bd62f2c3952c2a6111383", part: (text) => text },
-  { path: "src/host/events-list.ts", optional: true, sha256: "9d72fc8dd88fa88b22bf74eb078ad05afcaebff1b324976c42250c77d1ea605e", part: (text) => text },
   // The release kit, whole: one version in every plugin (CONTRIBUTING.md, Releasing). Change it in every plugin at once.
   { path: "scripts/attach-native.mjs", optional: false, sha256: "835b12b5d4e95fe87f61a2656f7be0baf8c805299cadff7110a16a6f2b475f8e", part: (text) => text },
   { path: "scripts/capture-tools.mjs", optional: false, sha256: "bf1276b41979c94519f4d42c580ebf8b077b66cb969fa234063a241d0073fa63", part: (text) => text },
@@ -34,13 +30,6 @@ const COPIES = [
   { path: "scripts/release-version.mjs", optional: false, sha256: "24c2b5f9caca6f381cbadd069178a4c3522c09a8f7a6acb06ce1b347f1c4994b", part: (text) => text },
   { path: "scripts/tested-hosts.mjs", optional: false, sha256: "370b2d6d7243cbc55ef435682bd75f113d0e18e5f7e063dd35407324362ce381", part: (text) => text },
 ]
-
-function sharedPart(text, path) {
-  const begin = text.indexOf(BEGIN)
-  const end = text.indexOf(END)
-  if (begin === -1 || end === -1 || end < begin) throw new Error(`${path}: the PLUGIN-SPECIFIC markers are missing or out of order`)
-  return text.slice(0, begin) + text.slice(end + END.length)
-}
 
 const print = process.argv.includes("--print")
 let failed = 0

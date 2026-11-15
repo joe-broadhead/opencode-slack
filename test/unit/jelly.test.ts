@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { APP_NAME, resolveClient, SERVER_DISPLAY_NAME } from "../../src/connect.js"
-import { SERVER } from "../../src/defaults.js"
+import { DEFAULT_SCOPES, SERVER } from "../../src/defaults.js"
 import plugin from "../../src/index.js"
 import { parseOptions } from "../../src/options.js"
 import { defaultRules } from "../../src/permissions.js"
@@ -16,11 +16,20 @@ import { fakeHost } from "./fakes.js"
  * standard; the tests below add what only Slack declares.
  */
 
-type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; hostClient?: { id: string; option: string; metadataOption?: string }; help?: { url: string; label: string }; relay?: Record<string, string> }
+type SignIn = { id: string; label: string; integration?: string; server?: string; scopes?: string[]; after?: string; presetBy?: string; hostClient?: { id: string; option: string; metadataOption?: string }; help?: { url: string; label: string }; relay?: Record<string, string> }
 const ROOT = new URL("../../", import.meta.url)
 const jelly = readPackage(ROOT).jelly as Declaration & { signIns: SignIn[] }
 
 describe("the jelly declaration", () => {
+  // Jelly re-asks a person to sign in only when a declared sign-in's scopes widen (declaration-refresh.ts), so the
+  // Slack sign-in declares exactly the scopes the plugin's default sign-in asks for, sorted as Jelly requires.
+  test("the Slack sign-in declares the default sign-in's scopes, sorted and unique", () => {
+    const scopes = (jelly.signIns as SignIn[]).find((signIn) => signIn.id === SERVER)?.scopes
+    expect(scopes).toEqual([...DEFAULT_SCOPES].sort())
+    expect(scopes?.every((scope, index) => index === 0 || scope > scopes[index - 1]!)).toBe(true)
+    expect(scopes).toHaveLength(11)
+  })
+
   test("declares the flat access option, with Jelly's own words for its three values", () => {
     const settings = (jelly.contributes as { settings: PluginSetting[] }).settings
     expect(settings).toEqual([
@@ -65,7 +74,7 @@ describe("the jelly declaration", () => {
       // proxy goes where the plugin reads the OAuth server metadata, so a sign-in through the relay renews.
       expect(app?.hostClient).toEqual({ id: "slack", option: "oauth.client_id", metadataOption: "oauth.auth_server_metadata_url" })
       expect(app?.presetBy).toBe("oauth.client_id")
-      expect(slack).toEqual({ id: "slack", label: SERVER_DISPLAY_NAME, server: SERVER, after: "app", relay: {} })
+      expect(slack).toEqual({ id: "slack", label: SERVER_DISPLAY_NAME, server: SERVER, scopes: [...DEFAULT_SCOPES].sort(), after: "app", relay: {} })
     })
 
     test("Slack's own sign-in may come back through Jelly's relay; the docs give its address, and the default manifest trusts only the loopback", () => {

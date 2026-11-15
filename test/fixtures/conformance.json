@@ -1,0 +1,238 @@
+{
+  "$comment": "Slack's answers for the source-contract conformance kit (test/support/conformance.ts), offline: auth.test's identity, the user's profile, slack_read_channel, slack_read_thread and slack_list_user_channels as Slack's server writes them, and the Web API answers of the slack.mentions and slack.dms sources (webApi, in Slack's documented shapes, keyed by method). No live call is made. Every workspace, channel, name and message is invented; the signed-in user is the placeholder U00CURRENTUSER, and the other members are Slack's documented example ids.",
+  "now": "2026-11-13T12:00:00.000Z",
+  "authTest": {
+    "ok": true,
+    "url": "https://example.slack.com/",
+    "team": "Example Workspace",
+    "user": "pilot.owner",
+    "team_id": "T0EXAMPLE01",
+    "user_id": "U00CURRENTUSER"
+  },
+  "profile": "# User profile\n**Real Name:** Pilot Owner\n**Display Name:** pilot\n**User ID:** U00CURRENTUSER\n**Team ID:** T0EXAMPLE01",
+  "optionChannels": [
+    "C0EXAMPLE01",
+    "D0EXAMPLE02"
+  ],
+  "channels": {
+    "C0EXAMPLE01": [
+      {
+        "ts": "1794477600.000100",
+        "user": "U012AB3CD",
+        "name": "Ama Mensah",
+        "text": "Postgres or SQLite for the queue?",
+        "replies": 2
+      },
+      {
+        "ts": "1794477700.000100",
+        "user": "U00CURRENTUSER",
+        "name": "Pilot Owner",
+        "text": "Let's go with Postgres.",
+        "thread": "1794477600.000100"
+      },
+      {
+        "ts": "1794481200.000100",
+        "user": "W012A3CDE",
+        "name": "Kofi Boateng",
+        "text": "The staging password is: Qv7mZr2pLx9T"
+      },
+      {
+        "ts": "1794488400.000100",
+        "user": "U012AB3CD",
+        "name": "Ama Mensah",
+        "text": "Release notes are drafted.\nSecond line."
+      }
+    ],
+    "D0EXAMPLE02": [
+      {
+        "ts": "1794484800.000100",
+        "user": "W012A3CDE",
+        "name": "Kofi Boateng",
+        "text": "Can you review the migration plan?"
+      }
+    ],
+    "C0EXAMPLE03": [
+      {
+        "ts": "1794485000.000100",
+        "user": "U012AB3CD",
+        "name": "Ama Mensah",
+        "text": "A channel nobody confirmed."
+      }
+    ]
+  },
+  "threads": {
+    "C0EXAMPLE01:1794477600.000100": [
+      {
+        "ts": "1794477600.000100",
+        "user": "U012AB3CD",
+        "name": "Ama Mensah",
+        "text": "Postgres or SQLite for the queue?",
+        "replies": 2
+      },
+      {
+        "ts": "1794477700.000100",
+        "user": "U00CURRENTUSER",
+        "name": "Pilot Owner",
+        "text": "Let's go with Postgres.",
+        "thread": "1794477600.000100"
+      },
+      {
+        "ts": "1794477800.000100",
+        "user": "W012A3CDE",
+        "name": "Kofi Boateng",
+        "text": "Agreed. I'll send the migration plan by Friday.",
+        "thread": "1794477600.000100"
+      }
+    ]
+  },
+  "userChannels": "# Your channels\n- #project-harbour (C0EXAMPLE01)\n- Direct message with Ama Mensah (D0EXAMPLE02)\n- #launch-room (C0EXAMPLE03)\n- Group message: Ama Mensah, Kofi Boateng (G0EXAMPLE04)\nNo more pages.",
+  "webApi": {
+    "assistant.search.context": [
+      {
+        "author_user_id": "W012A3CDE",
+        "author_name": "Kofi Boateng",
+        "channel_id": "D0EXAMPLE02",
+        "channel_name": "Kofi Boateng",
+        "message_ts": "1794486000.000100",
+        "content": "<@U00CURRENTUSER> can you review the migration plan?",
+        "permalink": "https://example.slack.com/archives/D0EXAMPLE02/p1794486000000100"
+      },
+      {
+        "author_user_id": "U00CURRENTUSER",
+        "author_name": "Pilot Owner",
+        "channel_id": "C0EXAMPLE01",
+        "channel_name": "project-harbour",
+        "message_ts": "1794485500.000100",
+        "content": "Noting it for <@U00CURRENTUSER> myself.",
+        "permalink": "https://example.slack.com/archives/C0EXAMPLE01/p1794485500000100"
+      },
+      {
+        "author_user_id": "U012AB3CD",
+        "author_name": "Ama Mensah",
+        "channel_id": "C0EXAMPLE01",
+        "channel_name": "project-harbour",
+        "message_ts": "1794481300.000100",
+        "content": "<@U00CURRENTUSER> the staging password is: Qv7mZr2pLx9T",
+        "permalink": "https://example.slack.com/archives/C0EXAMPLE01/p1794481300000100"
+      },
+      {
+        "author_user_id": "U012AB3CD",
+        "author_name": "Ama Mensah",
+        "channel_id": "C0EXAMPLE01",
+        "channel_name": "project-harbour",
+        "message_ts": "1794477900.000100",
+        "thread_ts": "1794477600.000100",
+        "content": "<@U00CURRENTUSER> does Postgres work for you?\nSecond line.",
+        "permalink": "https://example.slack.com/archives/C0EXAMPLE01/p1794477900000100?thread_ts=1794477600.000100&cid=C0EXAMPLE01"
+      }
+    ],
+    "users.conversations": {
+      "ok": true,
+      "channels": [
+        {
+          "id": "D0EXAMPLE02",
+          "is_im": true,
+          "user": "W012A3CDE",
+          "updated": 1794486000
+        },
+        {
+          "id": "G0EXAMPLE04",
+          "is_mpim": true,
+          "updated": 1794484000
+        },
+        {
+          "id": "D0EXAMPLE06",
+          "is_im": true,
+          "user": "U00CURRENTUSER",
+          "updated": 1794480000
+        },
+        {
+          "id": "D0EXAMPLE07",
+          "is_im": true,
+          "user": "U012AB3CD",
+          "updated": 1794470000,
+          "properties": {
+            "is_dormant": true
+          }
+        }
+      ],
+      "response_metadata": {
+        "next_cursor": ""
+      }
+    },
+    "conversations.history": {
+      "D0EXAMPLE02": {
+        "ok": true,
+        "messages": [
+          {
+            "ts": "1794486000.000100",
+            "user": "W012A3CDE",
+            "text": "<@U00CURRENTUSER> can you review the migration plan?"
+          }
+        ]
+      },
+      "G0EXAMPLE04": {
+        "ok": true,
+        "messages": [
+          {
+            "ts": "1794484000.000100",
+            "user": "U012AB3CD",
+            "text": "The deploy key is: password = Qv7mZr2pLx9T"
+          }
+        ]
+      },
+      "D0EXAMPLE07": {
+        "error": "channel_not_found"
+      }
+    },
+    "conversations.info": {
+      "D0EXAMPLE02": {
+        "ok": true,
+        "channel": {
+          "id": "D0EXAMPLE02",
+          "unread_count_display": 1,
+          "last_read": "1794480000.000100"
+        }
+      },
+      "G0EXAMPLE04": {
+        "ok": true,
+        "channel": {
+          "id": "G0EXAMPLE04",
+          "last_read": "1794484000.000100"
+        }
+      }
+    },
+    "conversations.members": {
+      "G0EXAMPLE04": {
+        "ok": true,
+        "members": [
+          "U00CURRENTUSER",
+          "U012AB3CD",
+          "W012A3CDE"
+        ]
+      }
+    },
+    "users.info": {
+      "U012AB3CD": {
+        "ok": true,
+        "user": {
+          "name": "ama",
+          "real_name": "Ama Mensah",
+          "profile": {
+            "display_name": "Ama"
+          }
+        }
+      },
+      "W012A3CDE": {
+        "ok": true,
+        "user": {
+          "name": "kofi",
+          "real_name": "Kofi Boateng",
+          "profile": {
+            "display_name": ""
+          }
+        }
+      }
+    }
+  }
+}

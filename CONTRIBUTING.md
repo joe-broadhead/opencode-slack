@@ -19,7 +19,7 @@ To try a checkout in OpenCode, build it with `npm run build` and point a `plugin
 
 ## Checks
 
-`npm run check` runs, in order: the type check of `src`, `scripts` and `test` (`tsc` emits nothing); the build, which bundles `dist/index.js` and `dist/tui.js` with esbuild (`scripts/build.ts`); the unit tests (including the forbidden-API scan); the TUI tests against the built dialog; the host tests on the embedded `@opencode/sdk` and on stock `opencode` 2.2.3, 2.2.4, 2.2.5 and 2.2.6 (`TESTED_HOSTS` in `src/defaults.ts`, the one list of tested releases); and the package test, which packs, installs and loads the tarball and checks that `dist/` holds only the two self-contained bundles. CI runs `npm ci --ignore-scripts` and `npm run check` on Linux and macOS, x64 and arm64.
+`npm run check` runs, in order: the type check of `src`, `scripts` and `test` (`tsc` emits nothing); the build, which bundles `dist/index.js` and `dist/tui.js` with esbuild (`scripts/build.ts`); the unit tests (including the forbidden-API scan); the conformance stage (`scripts/conformance.ts`), which runs source-contract's conformance kit over `events_list`, `probe` and `thread_read` with Slack's answers from `test/fixtures/conformance.json`, makes no live call, and writes `reports/conformance-report.json`, the report a release attaches; the TUI tests against the built dialog; the host tests on the embedded `@opencode/sdk` and on stock `opencode` 2.2.3, 2.2.4, 2.2.5 and 2.2.6 (`TESTED_HOSTS` in `src/defaults.ts`, the one list of tested releases); and the package test, which packs, installs and loads the tarball and checks that `dist/` holds only the two self-contained bundles. CI runs `npm ci --ignore-scripts` and `npm run check` on Linux and macOS, x64 and arm64.
 
 By default, the host and package tests install `@opencode/cli` from npm into a temporary directory, once per version and run. To use binaries you already have:
 
@@ -158,5 +158,5 @@ Each release has its own tag, and a Git install does not update by itself. To mo
 Or add the plugin to `opencode.json` instead, with the same spec:
 
 ```json
-{ "plugins": [{ "package": "github:joe-broadhead/opencode-slack#v0.0.2" }] }
+{ "plugins": [{ "package": "github:joe-broadhead/opencode-slack#v0.0.3" }] }
 ```

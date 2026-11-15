@@ -192,7 +192,7 @@ describe("buildStatus details", () => {
     expect(buildStatus(input())).toMatchObject({
       client: { id: "C1", mode: "public_pkce", source: "options" },
       callback: "http://localhost:8765/callback",
-      scopes: ["channels:history", "channels:read", "search:read.public", "users:read"],
+      scopes: ["channels:history", "channels:read", "search:read.public", "users:read", "search:read.private", "search:read.im", "search:read.mpim", "im:read", "im:history", "mpim:read", "mpim:history"],
       asksBefore: [],
       host: { version: "2.2.3", range: ">=2.2.3 <2.3.0", tested: true },
     })
@@ -373,7 +373,7 @@ describe("formatStatus", () => {
       "Server: slack at https://mcp.slack.com/mcp",
       "Client: C1 (public, PKCE; set in plugin options)",
       "Callback: http://localhost:8765/callback (register exactly this URL in the app's Redirect URLs)",
-      "Scopes: channels:history channels:read search:read.public users:read",
+      "Scopes: channels:history channels:read search:read.public users:read search:read.private search:read.im search:read.mpim im:read im:history mpim:read mpim:history",
       "Tools: 0 read, 0 private search, 0 file, 0 write",
       "Agents without default rules: none",
       "OpenCode: 2.2.3 (tested; supported range >=2.2.3 <2.3.0)",
@@ -401,6 +401,20 @@ describe("formatStatus", () => {
     expect(formatStatus(buildStatus(input({ account })))).toContain("Account: workspace T0TEAM0001, user U0USER0001\n")
     expect(formatStatus(buildStatus(input({ account: { ...account, enterpriseId: "E0GRID0001" } }))))
       .toContain("Account: workspace T0TEAM0001, user U0USER0001, Enterprise Grid E0GRID0001\n")
+    // The name and address auth.test also gives are the source's, for its pages: status shows only the ids.
+    expect(buildStatus(input({ account: { ...account, name: "sam", host: "acme.slack.com" } })).account).toEqual(account)
+  })
+
+  test("a connected sign-in that lacks scopes this version asks for says so, and its next step is to sign in again", () => {
+    const requested = (input().parsed as { ok: true; options: { scopes: readonly string[] } }).options.scopes
+    const status = buildStatus(input({ granted: requested.filter((scope) => !scope.startsWith("im:")) }))
+    expect(status).toMatchObject({ state: "connected", missingScopes: ["im:read", "im:history"] })
+    expect(status.nextStep).toStartWith("The Slack sign-in lacks im:read im:history, which this version asks for. Add them to your Slack app's user scopes")
+    expect(formatStatus(status)).toContain(" (the sign-in lacks im:read im:history: sign in again)")
+    // Every scope granted, or the granted list unknown: nothing is reported.
+    expect(buildStatus(input({ granted: requested })).missingScopes).toBeUndefined()
+    expect(buildStatus(input()).missingScopes).toBeUndefined()
+    expect(buildStatus(input({ granted: [], servers: [{ name: "slack", status: { status: "pending" } }] })).missingScopes).toBeUndefined()
   })
 
   test("an account is shown only while connected", () => {

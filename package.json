@@ -1,6 +1,6 @@
 {
   "name": "@joe-broadhead/opencode-slack",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Unofficial OpenCode plugin for Slack",
   "keywords": [
@@ -76,10 +76,11 @@
     "test:host": "bun test test/host",
     "test:pack": "bun test test/pack",
     "drift": "bun scripts/drift.ts",
-    "check": "npm run typecheck && node scripts/check-copies.mjs && npm run build && npm test && npm run test:kit && npm run test:tui && npm run test:host && npm run test:pack && npm run icons && npm run actionlint",
+    "check": "npm run typecheck && node scripts/check-copies.mjs && npm run build && npm test && npm run conformance && npm run test:kit && npm run test:tui && npm run test:host && npm run test:pack && npm run icons && npm run actionlint",
     "icons": "node scripts/check-icons.mjs",
     "actionlint": "node scripts/check-actionlint.mjs",
-    "capture": "node scripts/capture-tools.mjs"
+    "capture": "node scripts/capture-tools.mjs",
+    "conformance": "bun scripts/conformance.ts"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
@@ -92,10 +93,142 @@
     "@opentui/solid": "0.8.0",
     "@types/babel__core": "7.20.5",
     "@types/bun": "1.4.3",
+    "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#v0.1.0",
     "babel-preset-solid": "1.9.16",
     "esbuild": "0.28.2",
     "solid-js": "1.9.17",
     "typescript": "5.9.3"
+  },
+  "sources": {
+    "contractVersion": 1,
+    "rpc": "slack.workspace.tools",
+    "probe": {
+      "action": "slack_probe"
+    },
+    "items": [
+      {
+        "id": "slack.workspace",
+        "kind": "events",
+        "reads": "message",
+        "tool": "events_list",
+        "input": {
+          "source": "slack"
+        },
+        "accounts": {
+          "named": false
+        },
+        "scope": {
+          "keys": [
+            "channels"
+          ],
+          "describe": "The channels and direct messages to read.",
+          "suggest": {
+            "tool": "channels_list",
+            "operations": [
+              "slack_list_user_channels"
+            ]
+          }
+        },
+        "details": [
+          {
+            "id": "slack.workspace.thread",
+            "tool": "thread_read",
+            "from": [
+              "thread"
+            ]
+          }
+        ],
+        "permission": {
+          "events": "slack_events_list",
+          "operations": [
+            "slack_read_user_profile",
+            "slack_read_channel",
+            "slack_read_thread"
+          ],
+          "identity": [
+            "slack_read_user_profile"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 65536,
+        "urlHosts": [
+          "*.slack.com"
+        ]
+      },
+      {
+        "id": "slack.mentions",
+        "kind": "events",
+        "reads": "message",
+        "tool": "mentions_list",
+        "input": {
+          "source": "mentions"
+        },
+        "accounts": {
+          "named": false
+        },
+        "permission": {
+          "events": "slack_mentions_list",
+          "operations": [
+            "slack_read_user_profile",
+            "assistant.search.context"
+          ],
+          "identity": [
+            "slack_read_user_profile"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 65536,
+        "urlHosts": [
+          "*.slack.com"
+        ]
+      },
+      {
+        "id": "slack.dms",
+        "kind": "snapshot",
+        "tool": "dms_list",
+        "output": "inbox",
+        "input": {
+          "source": "dms"
+        },
+        "params": {
+          "since": {
+            "relative": true
+          },
+          "limit": {}
+        },
+        "accounts": {
+          "named": false
+        },
+        "permission": {
+          "tool": "slack_dms_list",
+          "operations": [
+            "slack_read_user_profile",
+            "users.conversations",
+            "conversations.info",
+            "conversations.history",
+            "conversations.members",
+            "users.info"
+          ],
+          "identity": [
+            "slack_read_user_profile"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 65536,
+        "urlHosts": [
+          "*.slack.com"
+        ]
+      }
+    ]
   },
   "jelly": {
     "title": "Slack",
@@ -302,6 +435,19 @@
         "id": "slack",
         "label": "Slack",
         "server": "slack",
+        "scopes": [
+          "channels:history",
+          "channels:read",
+          "im:history",
+          "im:read",
+          "mpim:history",
+          "mpim:read",
+          "search:read.im",
+          "search:read.mpim",
+          "search:read.private",
+          "search:read.public",
+          "users:read"
+        ],
         "after": "app",
         "relay": {}
       }

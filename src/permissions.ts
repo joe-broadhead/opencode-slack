@@ -1,8 +1,7 @@
 import type { Plugin } from "@opencode/plugin"
 import type { Access } from "./options.js"
 import { SERVER } from "./defaults.js"
-import { EVENTS_LIST } from "./host/events-list.js"
-import { KNOWN_TOOLS, MARK_READ, STATUS_METHOD } from "./tools.js"
+import { CHANNELS_LIST, DMS_LIST, EVENTS_LIST, KNOWN_TOOLS, MARK_READ, MENTIONS_LIST, PROBE, STATUS_METHOD, WEB_READ } from "./tools.js"
 
 type AgentEditor = Parameters<Parameters<Plugin.Context["agent"]["transform"]>[0]>[0]
 
@@ -33,11 +32,20 @@ export function defaultRules(access: Access = "all"): Rule[] {
     ...READ_LIKE.map((tool) => rule(`${SERVER}_${tool}`, "allow")),
     // The plugin's own events_list only reads, and Memory's collector runs it with no one there.
     rule(`${SERVER}_${EVENTS_LIST}`, "allow"),
+    // Its probe names the signed-in workspace and user and reads no content.
+    rule(`${SERVER}_${PROBE}`, "allow"),
+    // Its channels_list lists the person's conversations, as slack_list_user_channels does, for a consumer's consent.
+    rule(`${SERVER}_${CHANNELS_LIST}`, "allow"),
     // The tools RPC's status method reads only the plugin's own status and the signed-in account's ids.
     rule(`${SERVER}_${STATUS_METHOD}`, "allow"),
     ...OTHER_TOOLS.map((tool) => rule(`${SERVER}_${tool}`, other)),
     // The plugin's own mark_read is a write: it changes the user's read state in Slack.
     rule(`${SERVER}_${MARK_READ}`, other),
+    // Its mentions_list and dms_list read your mentions and direct messages, private channels included, as the
+    // private search does; slack.read is each Web API read they make (on <workspace>:<method>).
+    rule(`${SERVER}_${MENTIONS_LIST}`, other),
+    rule(`${SERVER}_${DMS_LIST}`, other),
+    rule(`${SERVER}.${WEB_READ}`, other),
   ]
 }
 

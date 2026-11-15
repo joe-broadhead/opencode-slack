@@ -21,7 +21,7 @@ describe("serverConfig", () => {
       oauth: {
         client_id: "C1",
         redirect_uri: "http://localhost:8765/callback",
-        scope: "channels:history channels:read search:read.public users:read",
+        scope: "channels:history channels:read search:read.public users:read search:read.private search:read.im search:read.mpim im:read im:history mpim:read mpim:history",
       },
     })
   })
@@ -33,7 +33,7 @@ describe("serverConfig", () => {
       oauth: {
         client_id: "C1",
         redirect_uri: "http://localhost:8765/callback",
-        scope: "channels:history channels:read search:read.public users:read",
+        scope: "channels:history channels:read search:read.public users:read search:read.private search:read.im search:read.mpim im:read im:history mpim:read mpim:history",
         client_secret: "shh",
       },
     })
@@ -55,7 +55,7 @@ describe("serverConfig", () => {
         client_id: "C1",
         redirect_uri: "https://host.example/oauth/return",
         callback_port: 49200,
-        scope: "channels:history channels:read search:read.public users:read",
+        scope: "channels:history channels:read search:read.public users:read search:read.private search:read.im search:read.mpim im:read im:history mpim:read mpim:history",
       },
     })
   })
@@ -75,7 +75,7 @@ describe("serverConfig", () => {
       oauth: {
         client_id: "C1",
         redirect_uri: "http://localhost:8765/callback",
-        scope: "channels:history channels:read search:read.public users:read",
+        scope: "channels:history channels:read search:read.public users:read search:read.private search:read.im search:read.mpim im:read im:history mpim:read mpim:history",
         client_secret: "shh",
         auth_server_metadata_url: url,
       },

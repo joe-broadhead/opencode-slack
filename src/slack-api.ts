@@ -13,8 +13,23 @@ import { SERVER } from "./defaults.js"
 
 export const SLACK_API_URL = "https://slack.com/api/"
 
-/** The only Web API methods the plugin calls: who signed in (status), and marking a conversation read (`mark_read`). */
-export const SLACK_API_METHODS = ["auth.test", "conversations.mark"] as const
+/**
+ * The only Web API methods the plugin calls: who signed in (`auth.test`, for status and the sources' account), marking a
+ * conversation read (`conversations.mark`, for `mark_read`, the one write), the search for the user's mentions
+ * (`assistant.search.context`, the `slack.mentions` source), and the reads of the user's direct and group messages
+ * (`users.conversations`, `conversations.info`, `conversations.history`, `conversations.members` and `users.info`, the
+ * `slack.dms` source). Every method but `conversations.mark` only reads.
+ */
+export const SLACK_API_METHODS = [
+  "auth.test",
+  "conversations.mark",
+  "assistant.search.context",
+  "users.conversations",
+  "conversations.info",
+  "conversations.history",
+  "conversations.members",
+  "users.info",
+] as const
 export type SlackApiMethod = (typeof SLACK_API_METHODS)[number]
 
 /** No usable Slack sign-in: no server of the plugin's, no active connection, or no OAuth token in it. */
@@ -29,6 +44,10 @@ const SLACK_CODE = /^[a-z][a-z0-9_]{0,63}$/
 const NEEDED = /^[a-z][a-z0-9:._-]{0,63}(?:,[a-z][a-z0-9:._-]{0,63}){0,9}$/
 /** A Slack token of any kind, which an answer never carries back to a caller. */
 const TOKEN_LIKE = /\bxox[a-z]?[.-]/i
+/** A Slack scope name, such as `im:history`. */
+const SCOPE = /^[a-z][a-z0-9:._-]{0,63}$/
+/** Slack's `Retry-After` header on a 429: whole seconds. */
+const RETRY_AFTER = /^\d{1,5}$/
 
 export interface SlackApiSources {
   readonly mcp: Pick<Plugin.Context["mcp"], "list">
@@ -41,11 +60,16 @@ export interface SlackApiSources {
 
 export type SlackApiResult =
   | { readonly ok: true; readonly credential: string; readonly body: Readonly<Record<string, unknown>> }
-  | { readonly ok: false; readonly error: string; readonly needed?: string }
+  | { readonly ok: false; readonly error: string; readonly needed?: string; readonly retryAfter?: number }
 
 export interface SlackApi {
   /** The id of the active Slack sign-in's credential, or undefined without one. Reads no token. */
   credential(): Promise<string | undefined>
+  /**
+   * The scopes Slack granted the active sign-in, as OpenCode stored them with the credential (its `scope`), or
+   * undefined when it stored none. Only that one field is read from the credential; never the token.
+   */
+  granted(): Promise<readonly string[] | undefined>
   /** One request to Slack's Web API, as the signed-in user. */
   call(method: SlackApiMethod, params: Readonly<Record<string, string>>, signal?: AbortSignal): Promise<SlackApiResult>
 }
@@ -94,6 +118,18 @@ export function slackApi(sources: SlackApiSources): SlackApi {
 
   return {
     credential: async () => (await active())?.id,
+    async granted() {
+      const found = await active()
+      if (found === undefined) return undefined
+      try {
+        const metadata = (await sources.connection.resolve(found.connection) as { readonly metadata?: unknown } | undefined)?.metadata
+        const scope = isRecord(metadata) ? metadata["scope"] : undefined
+        if (typeof scope !== "string" || scope.trim() === "") return undefined
+        return scope.trim().split(/[\s,]+/).filter((item) => SCOPE.test(item))
+      } catch {
+        return undefined
+      }
+    },
 
     async call(method, params, signal) {
       const found = await active()
@@ -111,6 +147,7 @@ export function slackApi(sources: SlackApiSources): SlackApi {
       const stop = signal === undefined ? timeout : AbortSignal.any([signal, timeout])
       let status: number
       let body: unknown
+      let retryAfter: string | null = null
       try {
         const response = await raced((sources.fetch ?? globalThis.fetch)(`${SLACK_API_URL}${method}`, {
           method: "POST",
@@ -120,11 +157,15 @@ export function slackApi(sources: SlackApiSources): SlackApi {
           signal: stop,
         }), stop)
         status = response.status
+        retryAfter = response.headers.get("retry-after")
         body = status === 429 ? undefined : await raced(response.json() as Promise<unknown>, stop).catch(() => undefined)
       } catch {
         return { ok: false, error: REQUEST_FAILED }
       }
-      if (status === 429) return { ok: false, error: "ratelimited" }
+      if (status === 429) {
+        const wait = retryAfter !== null && RETRY_AFTER.test(retryAfter.trim()) ? Number(retryAfter.trim()) : undefined
+        return wait === undefined ? { ok: false, error: "ratelimited" } : { ok: false, error: "ratelimited", retryAfter: wait }
+      }
       if (!isRecord(body) || typeof body["ok"] !== "boolean") return { ok: false, error: REQUEST_FAILED }
       if (body["ok"]) return { ok: true, credential: found.id, body: scrub(body) as Record<string, unknown> }
       const error = typeof body["error"] === "string" && SLACK_CODE.test(body["error"]) ? body["error"] : REQUEST_FAILED

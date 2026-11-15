@@ -3,9 +3,13 @@ import { SERVER } from "./defaults.js"
 import { registerAppIntegration, resolveClient, sameClient, serverNamer, type ClientState } from "./connect.js"
 import { isSupportedHost, isTestedHost } from "./host-version.js"
 import { METHODS, registerToolsRpc } from "./host/tools-rpc.js"
-import { eventsMethod, eventsTool, type EventsToolOptions } from "./events.js"
+import { eventsMethod, eventsTool, PAGE_OUTPUT, type EventsToolOptions } from "./events.js"
 import { STATUS_WAIT_MS, workspaceIdentity } from "./identity.js"
 import { markReadMethod, markReadTool, type MarkReadOptions } from "./mark-read.js"
+import { channelsMethod, probeMethod, threadMethod } from "./source.js"
+import { dmsMethod } from "./dms.js"
+import { mentionsMethod } from "./mentions.js"
+import type { WebReadOptions } from "./web-reads.js"
 import { slackApi } from "./slack-api.js"
 import { statusMethod } from "./status-method.js"
 import { parseOptions } from "./options.js"
@@ -60,15 +64,18 @@ export default Plugin.define({
     let client: ClientState = { invalid: false }
     let bundled: readonly ListedSkill[] = []
     let cleanup = async () => {}
-    // Memory's source of Slack events: a Code Mode tool in the slack namespace, and the tools RPC method events_list.
-    const events: EventsToolOptions | undefined = options === undefined
-      ? undefined
-      : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, status: () => status({ account: false }) }
     // The one Slack Web API client, the only code that reads the Slack token: auth.test for status's account, and
     // conversations.mark for mark_read. It uses only the plugin's own server's sign-in.
     const api = slackApi({ mcp: ctx.mcp, connection: ctx.integration.connection, owned: () => options !== undefined && !nameInUse })
     const identity = workspaceIdentity(api)
+    // The slack.workspace source (package.json's sources): a Code Mode tool in the slack namespace, and the tools RPC
+    // methods events_list, probe and thread_read. Its account and owner are status's, from the same auth.test.
+    const events: EventsToolOptions | undefined = options === undefined
+      ? undefined
+      : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, identity: () => identity.get(), status: () => status({ account: false }) }
     const marking: MarkReadOptions | undefined = options === undefined ? undefined : { permission: ctx.permission, api, status: () => status({ account: false }) }
+    // The slack.mentions and slack.dms sources: tools RPC methods that read Slack's Web API through the same client.
+    const webReads: WebReadOptions | undefined = options === undefined ? undefined : { permission: ctx.permission, api, identity: () => identity.get(), status: () => status({ account: false }) }
 
     if (options !== undefined) {
       const fromConnect = options.clientId === undefined
@@ -141,6 +148,8 @@ export default Plugin.define({
         && servers.find((server) => server.name === SERVER)?.status.status === "connected"
       // Status waits at most STATUS_WAIT_MS for a first auth.test; the lookup goes on for the next status.
       const account = connected && withAccount ? await identity.get(STATUS_WAIT_MS).catch(() => undefined) : undefined
+      // The scopes Slack granted the sign-in, as OpenCode stored them with it: a sign-in from before this version lacks some.
+      const granted = connected && withAccount ? await api.granted().catch(() => undefined) : undefined
       return buildStatus({
         version: VERSION,
         hostVersion,
@@ -153,6 +162,7 @@ export default Plugin.define({
         client,
         servers,
         ...(account === undefined ? {} : { account }),
+        ...(granted === undefined ? {} : { granted }),
         tools: await ctx.tool.list(),
         agents: (await ctx.agent.list()).data,
         // A skill list the host cannot give reports nothing shadowed, rather than failing status.
@@ -178,9 +188,19 @@ export default Plugin.define({
     const stopTools = options === undefined
       ? async () => {}
       : await registerToolsRpc(ctx, {
-        methods: events === undefined || marking === undefined
+        methods: events === undefined || marking === undefined || webReads === undefined
           ? METHODS
-          : [...METHODS, eventsMethod(events), markReadMethod(marking), statusMethod(() => status())],
+          : [
+            ...METHODS,
+            eventsMethod(events),
+            probeMethod(events),
+            threadMethod(events, PAGE_OUTPUT),
+            channelsMethod(events),
+            mentionsMethod(webReads),
+            dmsMethod(webReads),
+            markReadMethod(marking),
+            statusMethod(() => status()),
+          ],
         mcp: {
           server: SERVER,
           managed: () => !nameInUse,

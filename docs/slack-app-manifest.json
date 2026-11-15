@@ -12,7 +12,14 @@
         "channels:history",
         "channels:read",
         "search:read.public",
-        "users:read"
+        "users:read",
+        "search:read.private",
+        "search:read.im",
+        "search:read.mpim",
+        "im:read",
+        "im:history",
+        "mpim:read",
+        "mpim:history"
       ]
     },
     "pkce_enabled": true
