@@ -14,19 +14,36 @@ declaration, because that schema accepts no unknown keys.
 ## Tools and permissions
 
 29 tools are declared (15 read-only). Jelly's agents have no base "allow everything"
-rule, so this plugin's own default rules, which it puts after that rule, never reach them. Jelly
-writes each declared `ask` or `deny` as that tool's default instead (the person's own choice
-replaces it), and denies a read-only helper every tool not marked `readOnly`. A declared `allow`
-changes nothing in Jelly.
+rule, so this plugin's own default rules, which it puts after that rule, never reach them. Every
+tool is declared `allow`, which changes nothing in Jelly: each tool follows the access choice and
+its `readOnly`, by Jelly's shared rules below, and a read-only helper is denied every tool not
+marked `readOnly`.
 
-- Ask: none. Every tool is declared `allow`, so a Jelly agent runs what the plugin's own default allows.
-- Off: none. To make one ask or stop, declare `ask` or `deny` for it, or set the plugin's `access` option in the agent's options.
+- Ask: none declared. At Ask before changes, every tool not marked `readOnly` asks first.
+- Off: none declared. At Read only, every tool not marked `readOnly` is off. A choice the person makes for one tool wins over both.
 
 Private search and file reads are marked read-only and, like every tool, allowed by default; declare a later `ask` rule if the agent should not read private content. The plugin's own `slack.events_list` is for Memory's collector, which runs it unattended, so it never asks; each Slack read it makes follows that read's own effect. Its own `slack.mark_read` is a write (`readOnly: false`), allowed like every tool. The sources' tools RPC methods (`probe`, `thread_read`, `channels_list`, `mentions_list` and `dms_list`) are not declared either, for the same reason as `status` below: they are what Memory, jelly's Home and Artifacts read through `package.json`'s `sources`, under each person's grant. `mentions_list` and `dms_list` read Slack's Web API with the person's own sign-in (the six reads SECURITY.md lists), and their default rule asks at `access: "ask-changes"` and is denied at `"read-only"`, like the private search. The Slack sign-in asks for the scopes they need (`search:read.private`, `search:read.im`, `search:read.mpim`, `im:read`, `im:history`, `mpim:read`, `mpim:history`): a Jelly whose Slack app lacks them needs them added to the app, and each person whose sign-in predates them signs in again. The Slack sign-in declares all its scopes (`signIns`), so Jelly asks each person again when they widen. Keep a hosted Jelly's Slack app internal to its workspace or listed in the Slack Marketplace: Slack refuses Real-time Search (`assistant.search.context`, which `mentions_list` uses) to unlisted distributed apps, and limits their new installs to one `conversations.history` request a minute, which `dms_list` makes per conversation. The tools RPC's `status` method, with its action `slack_status`, is not declared: `jelly.tools` lists the tools an agent can call, and `status` is a script method only, with no tool behind it, so a Jelly agent never sees it.
 
 A tool the upstream server adds later is not declared, so in Jelly it is not asked about by
 default. Keep `jelly.tools` in step with the known-tool list; `test/**/jelly.test.ts` checks
 each declared effect against the plugin's own default rules.
+
+Jelly's shared rules for every plugin of the family, word for word:
+
+<!-- family-block:start -->
+- At Allowed (`all`), the default, every tool runs without asking, declared or not, whatever its `effect`.
+- At Ask before changes (`ask-changes`), a `readOnly` tool runs, and every other tool asks first, including a tool this plugin does not declare.
+- At Read only (`read-only`), a `readOnly` tool runs, and every other tool is off, including a tool this plugin does not declare.
+- A declared `effect` of `allow` changes nothing: the tool follows the access choice and its `readOnly`.
+- A declared `effect` of `ask` makes the tool ask at Ask before changes, even when it is `readOnly`, and changes nothing at Allowed or Read only.
+- A declared `effect` of `deny` turns the tool off at Ask before changes and at Read only, and changes nothing at Allowed.
+- An action listed in `asks` asks first at Ask before changes and at Read only, and never at Allowed.
+- A tool named with one `*`, such as another account's `plaud-*.get_file`, follows the same rules as a tool named in full.
+- A choice the person makes for one tool wins over the access choice and the declared `effect`.
+- jelly leaves out a key it does not know at the top level of the `jelly` block, and reads the rest.
+- jelly refuses the plugin for a key it does not know inside anything it reads, such as a tool, a sign-in or a setting.
+- jelly refuses the plugin, with one plain line, when `requires` names a field or a feature it does not read.
+<!-- family-block:end -->
 
 ## Skills
 
