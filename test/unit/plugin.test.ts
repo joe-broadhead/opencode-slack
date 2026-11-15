@@ -78,15 +78,15 @@ describe("setup with a client ID in the options", () => {
 
   test("the status RPC carries the plugin's version from package.json and the tested host", async () => {
     const { version } = JSON.parse(await Bun.file(new URL("../../package.json", import.meta.url)).text()) as { version: string }
-    for (const host of ["2.2.3", "2.2.4", "2.2.5", "2.2.6"])
-      expect(await (await setUp({ version: host })).status()).toMatchObject({ version, host: { version: host, range: ">=2.2.3 <2.3.0", tested: true } })
+    for (const host of ["2.2.3", "2.2.4", "2.2.5", "2.2.6", "2.2.7", "2.3.0"])
+      expect(await (await setUp({ version: host })).status()).toMatchObject({ version, host: { version: host, range: ">=2.2.3 <2.4.0", tested: true } })
   })
 
   test("a release inside the supported range that the checks do not run on sets everything up, and status calls it untested", async () => {
     const host = await setUp({ version: "2.2.99", status: { slack: { status: "connected" } } })
     expect(registrations(host.calls)).toEqual(FULL)
     expect(await host.status()).toMatchObject({ state: "connected", host: { version: "2.2.99", tested: false } })
-    expect((await host.slashStatus()).text).toContain("OpenCode: 2.2.99 (untested; supported range >=2.2.3 <2.3.0)")
+    expect((await host.slashStatus()).text).toContain("OpenCode: 2.2.99 (untested; supported range >=2.2.3 <2.4.0)")
   })
 
   test("registers Slack's MCP server with the configured OAuth app", async () => {
@@ -183,7 +183,7 @@ describe("setup with a client ID in the options", () => {
       state: "connected",
       tools: { read: 1, private: 0, file: 0, write: 0, unknown: 1, unknownNames: ["slack_brand_new"] },
       unguardedAgents: [],
-      host: { version: "2.2.3", range: ">=2.2.3 <2.3.0", tested: true },
+      host: { version: "2.2.3", range: ">=2.2.3 <2.4.0", tested: true },
     })
   })
 
@@ -328,7 +328,7 @@ describe("setup without a client ID in the options", () => {
 })
 
 describe("setup that registers only the status surfaces", () => {
-  test.each(["2.2.2", "2.3.0", "3.0.0", "2.2.4-beta.1", "0.0.0-dev-385", "unknown"])("host %p", async (version) => {
+  test.each(["2.2.2", "2.4.0", "3.0.0", "2.2.4-beta.1", "0.0.0-dev-385", "unknown"])("host %p", async (version) => {
     const host = await setUp({ version })
     expect(host.calls).toEqual(STATUS_ONLY)
     expect(host.servers.size).toBe(0)
@@ -354,21 +354,21 @@ describe("setup that registers only the status surfaces", () => {
   })
 
   test("an untested host with allowUntestedHost proceeds and still warns", async () => {
-    const host = await setUp({ version: "2.3.0-beta.1", options: { oauth: { client_id: "C1" }, allowUntestedHost: true }, status: { slack: { status: "pending" } } })
+    const host = await setUp({ version: "2.4.0-beta.1", options: { oauth: { client_id: "C1" }, allowUntestedHost: true }, status: { slack: { status: "pending" } } })
     expect(registrations(host.calls)).toEqual(FULL)
     expect(host.servers.get("slack")).toStrictEqual(serverConfig(options({ allowUntestedHost: true }), { id: "C1", source: "options" }))
-    expect(await host.status()).toMatchObject({ state: "connecting", host: { version: "2.3.0-beta.1", tested: false } })
-    expect((await host.slashStatus()).text).toContain("OpenCode: 2.3.0-beta.1 (untested; supported range >=2.2.3 <2.3.0)")
+    expect(await host.status()).toMatchObject({ state: "connecting", host: { version: "2.4.0-beta.1", tested: false } })
+    expect((await host.slashStatus()).text).toContain("OpenCode: 2.4.0-beta.1 (untested; supported range >=2.2.3 <2.4.0)")
   })
 
   test("an untested host with allowUntestedHost and invalid options reports the invalid option", async () => {
-    const host = await setUp({ version: "2.3.0", options: { oauth: { bogus: 1 }, allowUntestedHost: true } })
+    const host = await setUp({ version: "2.4.0", options: { oauth: { bogus: 1 }, allowUntestedHost: true } })
     expect(host.calls).toEqual(STATUS_ONLY)
     expect(await host.status()).toMatchObject({
       state: "not_configured",
       code: "OPTIONS_INVALID",
       message: "Option oauth.bogus: This option is not supported.",
-      host: { version: "2.3.0", tested: false },
+      host: { version: "2.4.0", tested: false },
     })
     const text = (await host.slashStatus()).text
     expect(text).toContain("Connection: not configured. OPTIONS_INVALID: ")

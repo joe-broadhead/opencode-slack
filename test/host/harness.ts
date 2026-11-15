@@ -314,6 +314,23 @@ async function freePort(): Promise<number> {
  * A stock `opencode serve` on its own port, in an environment that holds only the temp root. It loads the Slack
  * plugin from `plugin`: the built checkout, or an installed package.
  */
+/**
+ * Waits until slack.workspace and the probe have finished activating, or failed to, in every project. From 2.2.7 a
+ * location answers before its plugins have loaded, so a first command, status or RPC call there would find neither.
+ */
+async function activatedEverywhere(client: Pick<Host["client"], "plugin">, root: Root): Promise<void> {
+  const deadline = Date.now() + 120_000
+  for (const project of PROJECTS) {
+    for (;;) {
+      const plugins = (await client.plugin.list({ location: { directory: root.directory(project) } }).catch(() => undefined))?.data ?? []
+      const settled = ["slack.workspace", "slack.test.probe"].map((id) => plugins.find((entry) => entry.id === id)?.state.status)
+      if (settled.every((status) => status === "active" || status === "failed")) break
+      if (Date.now() > deadline) throw new Error(`the plugins did not finish activating in ${project}: ${JSON.stringify(settled)}`)
+      await Bun.sleep(250)
+    }
+  }
+}
+
 export async function startBinary(version: string, plugin = REPO): Promise<Host> {
   const binary = stockBinary(version)
   const root = makeRoot(`cli-${version}`, plugin)
@@ -368,6 +385,12 @@ export async function startBinary(version: string, plugin = REPO): Promise<Host>
       }
       await Bun.sleep(500)
     }
+  }
+  try {
+    await activatedEverywhere(client, root)
+  } catch (error) {
+    await close()
+    throw error
   }
   return {
     version,

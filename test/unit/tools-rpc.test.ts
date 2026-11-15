@@ -77,7 +77,7 @@ interface Setup {
   /** Test-only: false disables the MCP-only next-step shim below, to prove registration still requires them. */
   shim?: boolean
   lookup?: (sessionID: string) => Promise<unknown>
-  /** A host that reports a missing agent as a plain Error, as stock 2.2.3 to 2.2.6 do. */
+  /** A host that reports a missing agent as a plain Error, as stock 2.2.3 to 2.2.7 and 2.3.0 do. */
   plainAgentError?: boolean
   unavailableDetail?: NonNullable<ToolsRpcOptions["mcp"]>["unavailableDetail"]
   notRegistered?: NonNullable<ToolsRpcOptions["mcp"]>["notRegistered"]
