@@ -33,6 +33,7 @@ import {
   whoOf,
 } from "./events.js"
 import type { JsonSchema, OwnedMethod } from "./host/tools-rpc.js"
+import { CHANNELS_LIST } from "./tools.js"
 
 /**
  * The two reads source-contract version 1 adds beside `events_list`, both tools RPC methods only:
@@ -59,15 +60,21 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 // ── probe ────────────────────────────────────────────────────────────────
 
+/** The names `probe` knows the plugin's sources by: each descriptor's `input.source`. */
+export const SOURCE_NAMES: readonly string[] = [SLACK_SOURCE, "mentions", "dms"]
+
 /**
- * `probe`'s answer for the signed-in account: who the source belongs to, and nothing it reads. The input is checked
- * before Slack is called; the profile must be the same user `auth.test` named.
+ * `probe`'s answer for the signed-in account: who the source belongs to, and nothing it reads. One sign-in serves
+ * every source, so the answer is the same for each but its `source`. The account, the owner's id and the owner's label
+ * are `auth.test`'s, exactly as every page and snapshot names them; the user's own profile, the identity operation,
+ * must name the same user. The input is checked before Slack is called.
  */
 export async function slackProbe(read: Read, signed: Who, input: unknown): Promise<ProbeResult> {
   const parsed = parseProbeInput(input)
   if (!parsed.ok) throw eventsError("INPUT_INVALID", `The probe input is invalid: ${parsed.problems.join("; ")}.`, `Pass only "source" and "account", or an empty object.`)
-  if (parsed.value.source !== undefined && parsed.value.source !== SLACK_SOURCE) {
-    throw eventsError("SOURCE_UNKNOWN", `This plugin has only the source "${SLACK_SOURCE}".`, `Leave "source" out, or pass "${SLACK_SOURCE}".`)
+  const source = parsed.value.source ?? SLACK_SOURCE
+  if (!SOURCE_NAMES.includes(source)) {
+    throw eventsError("SOURCE_UNKNOWN", `This plugin has the sources ${SOURCE_NAMES.map((name) => `"${name}"`).join(", ")}, and no other.`, `Leave "source" out, or pass one of them.`)
   }
   const who = await whoOf(signed)
   if (parsed.value.account !== undefined && parsed.value.account !== who.account) {
@@ -77,20 +84,20 @@ export async function slackProbe(read: Read, signed: Who, input: unknown): Promi
   if (profile.owner.id !== who.owner.id) {
     throw eventsError("UNAVAILABLE", "Slack's profile and its auth.test name different users.", "Run /slack-status, sign in to Slack again if it names another account, then call probe again.")
   }
-  return probeResult({ source: SLACK_SOURCE, account: who.account, owner: profile.owner })
+  return probeResult({ source, account: who.account, owner: who.owner })
 }
 
 const PROBE_INPUT: JsonSchema = {
   type: "object",
   additionalProperties: false,
-  properties: { source: { type: "string", description: `"${SLACK_SOURCE}"` }, account: { type: "string", description: "The workspace, as a page names it" } },
+  properties: { source: { type: "string", enum: [...SOURCE_NAMES], description: `The source: "${SLACK_SOURCE}" by default` }, account: { type: "string", description: "The workspace, as a page names it" } },
 }
 
 const PROBE_OUTPUT: JsonSchema = {
   type: "object",
   required: ["source", "account", "owner", "trust"],
   properties: {
-    source: { type: "string", enum: [SLACK_SOURCE] },
+    source: { type: "string", enum: [...SOURCE_NAMES] },
     account: { type: "string", description: "The workspace's team id" },
     owner: { type: "object", required: ["id", "label"], properties: { id: { type: "string" }, label: { type: "string" } } },
     trust: { type: "string", enum: ["untrusted"] },
@@ -104,7 +111,7 @@ export function probeMethod(options: EventsToolOptions): OwnedMethod {
     class: "read",
     name: PROBE,
     action: PROBE_ACTION,
-    description: "The signed-in Slack workspace and user for the slack source, as Slack's auth.test and the user's own profile name them, and no content.",
+    description: "The signed-in Slack workspace and user for one of the plugin's sources (slack, mentions or dms), as Slack's auth.test names them, checked against the user's own profile; no content.",
     input: PROBE_INPUT,
     output: PROBE_OUTPUT,
     run: async (input, call) => {
@@ -203,6 +210,108 @@ export function threadMethod(options: EventsToolOptions, page: JsonSchema): Owne
       const context = call as unknown as Context
       await assertAction(options, THREAD_READ_ACTION, context)
       return slackThread(reader(options, context, THREAD_READ), () => signedIn(options, THREAD_READ), options.channels, input)
+    },
+    available: availability(options),
+  }
+}
+
+// ── channels_list ────────────────────────────────────────────────────────
+
+/** `channels_list`: the `slack.workspace` source's `scope.suggest`, the conversations a person may confirm at bind. */
+export { CHANNELS_LIST }
+/** Its action, as source-contract derives a suggest tool's (`<namespace>_<tool>`); allowed at every `access` value. */
+export const CHANNELS_LIST_ACTION = `${SERVER}_${CHANNELS_LIST}`
+/** The pages of `slack_list_user_channels` one call reads, and the options it offers at most (the contract caps a suggest at 64). */
+const LIST_PAGES = 5
+const MAX_OPTIONS = 64
+const LISTED_ID = /\b([CDG][A-Z0-9]{8,12})\b/
+const NEXT_CURSOR = /(?:next[ _]?cursor|cursor)\W{0,3}[:=][\s*"'`]*([A-Za-z0-9+/=_-]{6,})/i
+
+/** One option: a conversation's id and, when Slack names it, its name. */
+export interface ChannelOption {
+  readonly id: string
+  readonly label?: string
+}
+
+/**
+ * The conversations in one `slack_list_user_channels` answer, and its next page's cursor: Slack's JSON when it gives
+ * it (`channels: [{ id, name }]`), else each line of its Markdown that holds a conversation id, labelled with the
+ * `#name` or `Name:` the same line gives.
+ */
+export function channelOptions(answer: { readonly output?: unknown; readonly text: string }): { options: ChannelOption[]; next?: string } {
+  let output = answer.output
+  if (output === undefined || typeof output === "string") {
+    try {
+      output = JSON.parse(typeof output === "string" ? output : answer.text) as unknown
+    } catch {
+      output = undefined
+    }
+  }
+  const data = isRecord(output) ? output : {}
+  const meta = isRecord(data["response_metadata"]) ? data["response_metadata"] : {}
+  const label = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value.trim().replace(/\s+/g, " ").slice(0, 120) : undefined)
+  if (Array.isArray(data["channels"])) {
+    const options = data["channels"].flatMap((item): ChannelOption[] => {
+      const entry = isRecord(item) ? item : {}
+      const id = typeof entry["id"] === "string" && LISTED_ID.test(entry["id"]) ? entry["id"] : undefined
+      const name = label(entry["name"])
+      return id === undefined ? [] : [{ id, ...(name === undefined ? {} : { label: name }) }]
+    })
+    const next = label(meta["next_cursor"]) ?? label(data["next_cursor"])
+    return next === undefined ? { options } : { options, next }
+  }
+  const options: ChannelOption[] = []
+  let next: string | undefined
+  for (const line of answer.text.split(/\r?\n/)) {
+    if (/cursor/i.test(line)) {
+      next = NEXT_CURSOR.exec(line)?.[1] ?? next
+      continue
+    }
+    const id = LISTED_ID.exec(line)?.[1]
+    if (id === undefined) continue
+    const name = /#([A-Za-z0-9._-]{1,80})/.exec(line)?.[1] ?? /\bname\W{0,4}[:=]\s*\**\s*([^|*(\n]+)/i.exec(line)?.[1]
+    const named = label(name)
+    options.push({ id, ...(named === undefined ? {} : { label: named }) })
+  }
+  return next === undefined ? { options } : { options, next }
+}
+
+/** The person's conversations, as `scope.suggest` lists them: at most `MAX_OPTIONS`, each once. */
+export async function slackChannels(read: Read, input: unknown): Promise<{ options: ChannelOption[] }> {
+  const call = isRecord(input) ? input : {}
+  const extra = Object.keys(call).find((key) => !["source", "account"].includes(key))
+  if (extra !== undefined || (call["source"] !== undefined && call["source"] !== SLACK_SOURCE && call["source"] !== "slack.workspace")) {
+    throw eventsError("INPUT_INVALID", "The channels_list input is invalid: it takes only source and account.", `Pass {} or { "source": "${SLACK_SOURCE}" }.`)
+  }
+  const seen = new Map<string, ChannelOption>()
+  let cursor: string | undefined
+  for (let page = 0; page < LIST_PAGES && seen.size < MAX_OPTIONS; page++) {
+    const listed = channelOptions(await read("slack_list_user_channels", { types: "public_channel,private_channel,mpim,im", limit: 200, ...(cursor === undefined ? {} : { cursor }) }))
+    for (const option of listed.options) if (!seen.has(option.id) && seen.size < MAX_OPTIONS) seen.set(option.id, option)
+    cursor = listed.next
+    if (cursor === undefined) break
+  }
+  return { options: [...seen.values()] }
+}
+
+/** `channels_list` as a tools RPC method: it asserts its own action, then lists through Slack's own tool. */
+export function channelsMethod(options: EventsToolOptions): OwnedMethod {
+  return {
+    kind: "plugin",
+    class: "read",
+    name: CHANNELS_LIST,
+    action: CHANNELS_LIST_ACTION,
+    description: "For a consumer's consent: the person's Slack conversations as { options: [{ id, label }] }, from slack_list_user_channels, to confirm as the slack source's scope.channels.",
+    input: { type: "object", additionalProperties: false, properties: { source: { type: "string" }, account: { type: "string" } } },
+    output: {
+      type: "object",
+      required: ["options"],
+      properties: { options: { type: "array", items: { type: "object", required: ["id"], properties: { id: { type: "string" }, label: { type: "string" } } } } },
+    },
+    run: async (input, call) => {
+      const context = call as unknown as Context
+      await assertAction(options, CHANNELS_LIST_ACTION, context)
+      return slackChannels(reader(options, context, CHANNELS_LIST), input)
     },
     available: availability(options),
   }

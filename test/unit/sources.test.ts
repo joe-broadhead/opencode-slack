@@ -3,13 +3,14 @@
 // the kit does not reach. Every id below is invented, or the placeholder U00CURRENTUSER.
 import { describe, expect, test } from "bun:test"
 import { assertDeclaration } from "@we-the-rebel-alliance/source-contract/conformance"
-import { probeResultProblems } from "@we-the-rebel-alliance/source-contract/events"
+import { EVENTS_LIST as CONTRACT_EVENTS_LIST, PROBE as CONTRACT_PROBE, probeResultProblems } from "@we-the-rebel-alliance/source-contract/events"
 import { toolsRpcIdProblems } from "@we-the-rebel-alliance/source-contract/tools-rpc"
 import { PAGE_OUTPUT, signedInOf, type EventsToolOptions } from "../../src/events.js"
 import { TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { identityOf } from "../../src/identity.js"
 import { PROBE_ACTION, probeMethod, slackProbe, slackThread, threadMethod, THREAD_READ_ACTION } from "../../src/source.js"
 import type { Status } from "../../src/status.js"
+import { EVENTS_LIST, PROBE } from "../../src/tools.js"
 import { FIXTURE, conformanceReports, declaredSources, declaredTools, installed } from "../support/conformance.js"
 
 const WHO = signedInOf(identityOf(FIXTURE.authTest)!)
@@ -19,13 +20,28 @@ const PROFILE = { text: FIXTURE.profile }
 const call = { sessionID: "ses_1", agent: "build", messageID: "msg_1", id: "call_1", signal: new AbortController().signal, progress: async () => {} }
 
 describe("package.json's sources", () => {
-  test("is one events source, read as a consumer reads an installed plugin, and passes Memory's schema and the kit's rules", () => {
+  test("is three sources, read as a consumer reads an installed plugin, and passes Memory's schema and the kit's rules", () => {
     const descriptor = installed()
     expect(descriptor.package).toBe("@joe-broadhead/opencode-slack")
     expect(descriptor.hash).toMatch(/^sha256:[0-9a-f]{64}$/)
     const sources = declaredSources()
-    expect(sources.items.map((item) => [item.id, item.kind, item.tool])).toEqual([["slack.workspace", "events", "events_list"]])
+    expect(sources.items.map((item) => [item.id, item.kind, item.tool])).toEqual([
+      ["slack.workspace", "events", "events_list"],
+      ["slack.mentions", "events", "mentions_list"],
+      ["slack.dms", "snapshot", "dms_list"],
+    ])
+    // Every source reads under its own operations: the Web API methods its reads call, as `<workspace>:<method>`.
+    expect(Object.fromEntries(sources.items.map((item) => [item.id, item.permission.operations]))).toEqual({
+      "slack.workspace": ["slack_read_user_profile", "slack_read_channel", "slack_read_thread"],
+      "slack.mentions": ["slack_read_user_profile", "assistant.search.context"],
+      "slack.dms": ["slack_read_user_profile", "users.conversations", "conversations.info", "conversations.history", "conversations.members", "users.info"],
+    })
+    for (const item of sources.items) expect({ id: item.id, identity: item.permission.identity, private: item.private, cost: item.cost }).toEqual({ id: item.id, identity: ["slack_read_user_profile"], private: true, cost: { class: "free" } })
     expect(() => assertDeclaration(sources, { tools: declaredTools() })).not.toThrow()
+  })
+
+  test("names the contract's methods as source-contract does, so the default rules and status need no source module", () => {
+    expect([EVENTS_LIST, PROBE]).toEqual([CONTRACT_EVENTS_LIST, CONTRACT_PROBE])
   })
 
   test("names the tools RPC this plugin registers, and the probe action and detail read its methods assert", () => {
@@ -40,13 +56,15 @@ describe("package.json's sources", () => {
     expect(source!.permission.identity).toEqual(["slack_read_user_profile"])
   })
 
-  test("passes the conformance kit over events_list, probe and thread_read, with every check that applies run", async () => {
+  test("passes the conformance kit for every source, with every check that applies run", async () => {
     const reports = await conformanceReports()
-    expect(reports.map((report) => ({ source: report.source, problems: report.problems, incomplete: report.incomplete, ok: report.ok }))).toEqual([
-      { source: "slack.workspace", problems: [], incomplete: false, ok: true },
-    ])
-    const checks = Object.fromEntries(reports[0]!.checks.map((check) => [check.name, check.notApplicable ? "n/a" : check.ran ? "ran" : "missing"]))
-    expect(checks).toMatchObject({ "page-result": "ran", "gap-and-cursor-expired": "ran", "refused-is-final": "ran", probe: "ran", details: "ran", "unused-grants": "ran", "failed-holds-cursor": "n/a" })
+    expect(reports.map((report) => ({ source: report.source, problems: report.problems, incomplete: report.incomplete, ok: report.ok }))).toEqual(
+      ["slack.workspace", "slack.mentions", "slack.dms"].map((source) => ({ source, problems: [], incomplete: false, ok: true })),
+    )
+    const checks = (index: number) => Object.fromEntries(reports[index]!.checks.map((check) => [check.name, check.notApplicable ? "n/a" : check.ran ? "ran" : "missing"]))
+    expect(checks(0)).toMatchObject({ "page-result": "ran", "gap-and-cursor-expired": "ran", "refused-is-final": "ran", probe: "ran", details: "ran", suggest: "ran", "unused-grants": "ran", "failed-holds-cursor": "n/a" })
+    expect(checks(1)).toMatchObject({ "page-result": "ran", "gap-and-cursor-expired": "ran", "refused-is-final": "ran", probe: "ran", "unused-grants": "ran", "failed-holds-cursor": "n/a" })
+    expect(checks(2)).toMatchObject({ probe: "ran", "identity-grants": "ran", "unused-grants": "ran", "page-result": "n/a" })
   })
 })
 
@@ -55,7 +73,10 @@ describe("probe", () => {
     const reads: string[] = []
     const read = async (tool: string) => (reads.push(tool), PROFILE)
     const answer = await slackProbe(read, WHO, {})
-    expect(answer).toEqual({ source: "slack", account: "T0EXAMPLE01", owner: { id: "slack:U00CURRENTUSER", label: "Pilot Owner" }, trust: "untrusted" })
+    // The label is auth.test's, as on every page and snapshot; the profile only confirms the user.
+    expect(answer).toEqual({ source: "slack", account: "T0EXAMPLE01", owner: { id: "slack:U00CURRENTUSER", label: "pilot.owner" }, trust: "untrusted" })
+    expect((await slackProbe(read, WHO, { source: "dms" })).source).toBe("dms")
+    reads.length = 1
     expect(probeResultProblems(answer, { source: "slack", account: "T0EXAMPLE01" })).toEqual([])
     expect(reads).toEqual(["slack_read_user_profile"])
     await expect(slackProbe(read, WHO, { source: "gmail" })).rejects.toThrow(/^SOURCE_UNKNOWN: /)

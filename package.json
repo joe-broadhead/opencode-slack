@@ -121,7 +121,13 @@
           "keys": [
             "channels"
           ],
-          "describe": "The channels and direct messages to read."
+          "describe": "The channels and direct messages to read.",
+          "suggest": {
+            "tool": "channels_list",
+            "operations": [
+              "slack_list_user_channels"
+            ]
+          }
         },
         "details": [
           {
@@ -138,6 +144,76 @@
             "slack_read_user_profile",
             "slack_read_channel",
             "slack_read_thread"
+          ],
+          "identity": [
+            "slack_read_user_profile"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 65536,
+        "urlHosts": [
+          "*.slack.com"
+        ]
+      },
+      {
+        "id": "slack.mentions",
+        "kind": "events",
+        "reads": "message",
+        "tool": "mentions_list",
+        "input": {
+          "source": "mentions"
+        },
+        "accounts": {
+          "named": false
+        },
+        "permission": {
+          "events": "slack_mentions_list",
+          "operations": [
+            "slack_read_user_profile",
+            "assistant.search.context"
+          ],
+          "identity": [
+            "slack_read_user_profile"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 65536,
+        "urlHosts": [
+          "*.slack.com"
+        ]
+      },
+      {
+        "id": "slack.dms",
+        "kind": "snapshot",
+        "tool": "dms_list",
+        "output": "inbox",
+        "input": {
+          "source": "dms"
+        },
+        "params": {
+          "since": {
+            "relative": true
+          },
+          "limit": {}
+        },
+        "accounts": {
+          "named": false
+        },
+        "permission": {
+          "tool": "slack_dms_list",
+          "operations": [
+            "slack_read_user_profile",
+            "users.conversations",
+            "conversations.info",
+            "conversations.history",
+            "conversations.members",
+            "users.info"
           ],
           "identity": [
             "slack_read_user_profile"

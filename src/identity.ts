@@ -61,7 +61,7 @@ export function identityOf(body: Readonly<Record<string, unknown>>): Identity | 
  * concurrent reads. A failure gives no identity, never an error, and is tried again after a minute. With `wait`, `get`
  * answers within that many milliseconds, with no identity if Slack has not answered yet.
  */
-export function workspaceIdentity(api: SlackApi, now: () => number = Date.now) {
+export function workspaceIdentity(api: Pick<SlackApi, "credential" | "call">, now: () => number = Date.now) {
   let known: { readonly credential: string; readonly identity: Promise<Identity | undefined> } | undefined
   let failed: { readonly credential: string; readonly at: number } | undefined
 

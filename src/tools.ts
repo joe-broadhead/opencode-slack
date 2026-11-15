@@ -36,9 +36,20 @@ export const KNOWN_TOOLS: Readonly<Record<string, Exclude<ToolClass, "unknown">>
   slack_update_list_record: "write",
 }
 
-/** The plugin's own tools RPC methods beside `events_list`: its write `mark_read` and its `status`. */
+/**
+ * The plugin's own tools RPC methods, by name: its write `mark_read`, its `status`, and its sources' reads (source-contract's
+ * `events_list` and `probe`, the consent list `channels_list`, and the Web API sources' `mentions_list` and `dms_list`).
+ * Kept here, with no import, so the default rules and status (which the TUI bundles) need no source module.
+ */
 export const MARK_READ = "mark_read"
 export const STATUS_METHOD = "status"
+export const EVENTS_LIST = "events_list"
+export const PROBE = "probe"
+export const CHANNELS_LIST = "channels_list"
+export const MENTIONS_LIST = "mentions_list"
+export const DMS_LIST = "dms_list"
+/** The action each Web API read of a source asserts, on `<workspace>:<method>`: source-contract's `<namespace>.read`. */
+export const WEB_READ = "read"
 
 export const READ_TOOLS: readonly string[] = Object.keys(KNOWN_TOOLS).filter((tool) => KNOWN_TOOLS[tool] === "read")
 

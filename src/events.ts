@@ -193,13 +193,13 @@ const EVENT = {
   },
 }
 
-/** A page, as `events_list` and `thread_read` answer it. */
-export const PAGE_OUTPUT: JsonSchema = {
+/** A page of `source`, as `events_list`, `thread_read` and `mentions_list` answer it. */
+export const pageOutput = (source: string): JsonSchema => ({
   type: "object",
   required: ["source", "account", "owner", "events", "cursor", "more", "trust"],
   properties: {
     plugin: { type: "string", enum: [PLUGIN_NAME] },
-    source: { type: "string", enum: [SLACK_SOURCE] },
+    source: { type: "string", enum: [source] },
     account: { type: "string", description: "The workspace's team id, as Slack's auth.test names it" },
     owner: OWNER,
     scope: { type: "object", description: "The scope the page was read under, when the call named one" },
@@ -219,7 +219,10 @@ export const PAGE_OUTPUT: JsonSchema = {
     more: { type: "boolean", description: "True when another call now would list more" },
     trust: { type: "string", enum: ["untrusted"] },
   },
-}
+})
+
+/** A page of the `slack` source. */
+export const PAGE_OUTPUT = pageOutput(SLACK_SOURCE)
 
 /** The channels a scope names, or the problems with them. A one-id string is one id. */
 function scopeChannelsOf(request: EventsListRequest): string[] | undefined {
@@ -461,7 +464,7 @@ export function profileOf(answer: Answer): { owner: EventsOwner; team?: string; 
 
 // ── Events ──────────────────────────────────────────────────────────────
 
-const kindOfChannel = (channel: string) => (/^C/.test(channel) ? "channel" : /^G/.test(channel) ? "group" : "dm")
+export const kindOfChannel = (channel: string) => (/^C/.test(channel) ? "channel" : /^G/.test(channel) ? "group" : "dm")
 
 /** The message's permalink: Slack's own, or one built from the workspace's address for a conversation id. */
 function permalinkOf(channel: string, message: SlackMessage, host: string | undefined) {

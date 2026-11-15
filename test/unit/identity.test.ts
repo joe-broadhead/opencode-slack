@@ -13,7 +13,7 @@ const NAMED = { name: "sam", host: "acme.slack.com" }
 /** A Web API client over one credential id that answers auth.test with `answer`, and counts the calls. */
 function fakeApi(answers: (() => SlackApiResult)[], credential: () => string | undefined = () => "crd_one") {
   const calls: string[] = []
-  const api: SlackApi = {
+  const api: Pick<SlackApi, "credential" | "call"> = {
     credential: async () => credential(),
     call: async (method) => {
       calls.push(method)
@@ -124,7 +124,7 @@ describe("workspaceIdentity", () => {
   })
 
   test("a client that throws gives no identity", async () => {
-    const api: SlackApi = { credential: async () => "crd_one", call: async () => { throw new Error("boom") } }
+    const api: Pick<SlackApi, "credential" | "call"> = { credential: async () => "crd_one", call: async () => { throw new Error("boom") } }
     expect(await workspaceIdentity(api).get()).toBeUndefined()
   })
 })
