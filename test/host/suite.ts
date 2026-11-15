@@ -113,7 +113,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
           tools: { read: 12, private: 1, file: 1, write: 13, unknown: 1, unknownNames: ["slack_brand_new_tool"] },
           unguardedAgents: ["custom"],
           version: PACKAGE_VERSION,
-          host: { version: host.version, range: ">=2.2.3 <2.3.0", tested: true },
+          host: { version: host.version, range: ">=2.2.3 <2.4.0", tested: true },
           client: { id: CLIENT_ID, mode: "public_pkce" },
           // OpenCode lists the bundled skill under the path the plugin gave, so it is not reported as shadowed.
           shadowedSkills: [],
@@ -127,7 +127,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(text).toStartWith("Slack\nConnection: connected. ")
         expect(text).toContain(`Client: ${CLIENT_ID} (public, PKCE; set in plugin options)`)
         expect(text).toContain('Agents without default rules: custom\n[\n  { "action": "slack_*", "resource": "*", "effect": "allow" },')
-        expect(text).toContain(`OpenCode: ${host.version} (tested; supported range >=2.2.3 <2.3.0)`)
+        expect(text).toContain(`OpenCode: ${host.version} (tested; supported range >=2.2.3 <2.4.0)`)
       })
 
       test("the slack-search skill is registered", async () => {

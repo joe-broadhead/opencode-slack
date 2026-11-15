@@ -149,7 +149,7 @@ describe("the tarball", () => {
   test("has no dependencies, peers or install scripts, and states the tested host range", () => {
     installAlone()
     const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8")) as Record<string, unknown>
-    expect(manifest.opencode).toMatchObject({ host: ">=2.2.3 <2.3.0", vendor: { id: "slack", name: "Slack", domain: "slack.com" } })
+    expect(manifest.opencode).toMatchObject({ host: ">=2.2.3 <2.4.0", vendor: { id: "slack", name: "Slack", domain: "slack.com" } })
     expect((manifest.opencode as { icons: { src: string }[] }).icons.map((icon) => icon.src))
       .toEqual(["assets/icon.svg", "assets/icon-128.png", "assets/icon-256.png"])
     for (const field of ["dependencies", "peerDependencies", "peerDependenciesMeta", "optionalDependencies", "bundleDependencies", "bundledDependencies"]) {
@@ -192,7 +192,7 @@ describe.each(HOST_VERSIONS)("the installed package on stock opencode %s", (vers
     try {
       const location = host.location("defaults")
       const status = (await host.client.rpc.call({ rpcID: "slack.workspace", method: "status", location, input: {} })).output as Status
-      expect(status).toMatchObject({ version: pkg.version, host: { version, range: ">=2.2.3 <2.3.0", tested: true }, client: { id: CLIENT_ID } })
+      expect(status).toMatchObject({ version: pkg.version, host: { version, range: ">=2.2.3 <2.4.0", tested: true }, client: { id: CLIENT_ID } })
       const plugin = (await host.client.plugin.list({ location })).data.find((item) => item.id === "slack.workspace")
       // exports has no ./rpc, so OpenCode lists no RPC part; the server part registers the status RPC above.
       expect(plugin).toMatchObject({ state: { status: "active" }, features: { server: true, tui: true }, source: { path: installed } })

@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Admits OpenCode 2.3: the supported range is `>=2.2.3 <2.4.0` (`opencode.host` in `package.json` and
+  `SUPPORTED_HOST_RANGE`).
+  The plugin is tested on 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7 and 2.3.0: `TESTED_HOSTS` in `src/defaults.ts` is that list,
+  and the host and pack stages install every release in it, so CI now runs stock OpenCode 2.2.7 and 2.3.0 too. The
+  out-of-range example in the docs and tests is now 2.4.0.
+- The stock host test waits until `slack.workspace` and the test probe have activated in every test project before any
+  case runs: stock 2.2.7 and 2.3.0 answer a location's first requests before its plugins have loaded, where 2.2.6
+  waited.
+- What OpenCode 2.3 changes does not reach this plugin: it runs no subagents and does not subscribe to
+  `session.tool.failed` (it listens only for integration and credential events), and it has no use for the new
+  `session.fork` hook. `events_list` and `thread_read` hand the tool's signal to Slack's own tools, so they already stop
+  when the person presses Stop.
+
 ## [0.0.3] - 2026-11-15
 
 ### Added

@@ -146,11 +146,11 @@ Status shows the client mode as `confidential, secret set` and never shows the v
 
 ### Host check
 
-When it loads, the plugin compares the OpenCode version with its supported range, `>=2.2.3 <2.3.0`, which `package.json` declares as `opencode.host`. Every check runs on OpenCode 2.2.3, 2.2.4, 2.2.5 and 2.2.6, the tested releases. A later release in the range, such as 2.2.99, runs untested. Status shows the version, whether it is tested and the supported range in its `OpenCode` row, for example `2.2.5 (tested; supported range >=2.2.3 <2.3.0)`.
+When it loads, the plugin compares the OpenCode version with its supported range, `>=2.2.3 <2.4.0`, which `package.json` declares as `opencode.host`. Every check runs on OpenCode 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7 and 2.3.0, the tested releases. A later release in the range, such as 2.2.99, runs untested. Status shows the version, whether it is tested and the supported range in its `OpenCode` row, for example `2.2.5 (tested; supported range >=2.2.3 <2.4.0)`.
 
 - **A tested release:** the plugin sets everything up.
 - **Another release inside the range, such as 2.2.99:** the plugin sets everything up too. Status marks the version `untested` (the RPC's `host.tested` is `false`), and its state is the connection's.
-- **Outside the range, including prereleases and development builds:** the plugin registers only `/slack-status`, the TUI view and the status RPC. They show the connection `host untested` and the code `HOST_UNTESTED`, with the next step `Use OpenCode >=2.2.3 <2.3.0, or set "allowUntestedHost": true in this plugin's options to run anyway.` If an option is also invalid, they show `OPTIONS_INVALID` first.
+- **Outside the range, including prereleases and development builds:** the plugin registers only `/slack-status`, the TUI view and the status RPC. They show the connection `host untested` and the code `HOST_UNTESTED`, with the next step `Use OpenCode >=2.2.3 <2.4.0, or set "allowUntestedHost": true in this plugin's options to run anyway.` If an option is also invalid, they show `OPTIONS_INVALID` first.
 - **Outside the range with `"allowUntestedHost": true`:** the plugin sets everything up, and status marks the version as untested.
 
 ## Create the Slack app
@@ -545,7 +545,7 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `SERVER_DISABLED` | disabled | Enable slack in /mcps. |
 | `SERVER_NAME_IN_USE` | conflict | Remove mcp.servers.slack from your OpenCode config. |
 | `OPTIONS_INVALID` | not configured | See [Validation errors](#validation-errors). |
-| `HOST_UNTESTED` | host untested | Use OpenCode >=2.2.3 <2.3.0, or set "allowUntestedHost": true in this plugin's options to run anyway. |
+| `HOST_UNTESTED` | host untested | Use OpenCode >=2.2.3 <2.4.0, or set "allowUntestedHost": true in this plugin's options to run anyway. |
 | none: a shadowed skill | connected | Move or rename the skill at `<path>`, so that this plugin's slack-search skill loads, then run opencode reload. |
 | none: agents without default rules | connected | Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools. |
 | `STATUS_UNAVAILABLE` | none: status itself failed | Run /slack-status again in a moment (in the dialog: press r to retry). |
