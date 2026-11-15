@@ -18,20 +18,59 @@ All notable changes to this project are documented here. The format follows [Kee
 - `events_list` takes `scope: { channels }`, within the `events.channels` option when that is set. Its pages name the
   `plugin`, echo the `scope`, list a message that holds a secret in `refused[]` (never its text), and carry
   `gap: { reason: "expired", since }` when a cursor is more than 90 days old.
-- `npm run check` runs source-contract's conformance kit over `events_list`, `probe` and `thread_read`, offline, and
-  writes `reports/conformance-report.json` for the release to attach.
+- Two more sources, for Memory, jelly and Artifacts (app#2346's ask), after @domeevans's structured `mentions_list` and
+  `dms_list` (domeevans/opencode-slack#1). Thanks to @domeevans.
+  - `slack.mentions` (events, `mentions_list`, `slack_mentions_list`): the messages that mention you, in public and
+    private channels, direct and group messages, oldest first, with their thread, author and permalink, the same
+    page, bound cursor, `gap` and secret screening as `events_list`. Operations `slack_read_user_profile` (identity)
+    and `assistant.search.context`.
+  - `slack.dms` (snapshot, `dms_list`, `slack_dms_list`, output `inbox`): your direct and group messages, newest first:
+    who, the latest message (no preview when it holds a secret), unread or not. Params `since` (relative) and
+    `limit`. Operations `slack_read_user_profile` (identity), `users.conversations`, `conversations.info`,
+    `conversations.history`, `conversations.members` and `users.info`.
+  - Each Web API read asserts `slack.read` on `<workspace>:<method>` first, so a consumer's fenced session runs
+    exactly the declared calls. Both are allowed at `access: "all"`, ask at `"ask-changes"` and are denied at
+    `"read-only"`, like the private search; `slack.read` likewise. New code `RATE_LIMITED`.
+- `slack.workspace`'s `scope.suggest`: the tools RPC method `channels_list` (`slack_channels_list`, allowed at every
+  `access`) lists your conversations as `{ options: [{ id, label }] }` (at most 64) from `slack_list_user_channels`,
+  for a consumer's consent. No new Web API call.
+- `npm run check` runs source-contract's conformance kit over every source (`events_list`, `thread_read`,
+  `channels_list`, `mentions_list`, `dms_list` and `probe`), offline, and writes `reports/conformance-report.json`
+  for the release to attach.
 
 ### Changed
 
 - The tools RPC transport and the `events_list` contract are source-contract's modules (`tools-rpc`, `events`,
   `cursor`), pinned as `github:we-the-rebel-alliance/source-contract#v0.1.0` (commit `8ace21d`) and bundled into
   `dist/index.js`; there is still no runtime dependency. Same RPC id, methods and answers otherwise.
-- For Memory and jelly: `events_list`'s account and owner come from Slack's `auth.test`, as status's account does,
-  so it no longer reads the profile; the owner's label is the user's Slack name from `auth.test` rather than the
-  profile's full name. Without an `auth.test` answer the call is `UNAVAILABLE` (new code), or status's own code.
+- **Sign in to Slack again.** The default sign-in now also asks for `search:read.private`, `search:read.im`,
+  `search:read.mpim`, `im:read`, `im:history`, `mpim:read` and `mpim:history`, which `slack.mentions` and `slack.dms`
+  need. Add them to your Slack app (`docs/slack-app-manifest.json` lists every default), then sign in again.
+  `/slack-status` names the scopes a connected sign-in lacks (the RPC's `missingScopes`), from the scope list OpenCode
+  stored with the credential (never the token), and its next step is to sign in again. Until then the two new
+  sources answer `SCOPE_MISSING`; the rest works as before. With the new scopes, `slack_read_channel` and
+  `slack_read_thread` also read your direct and group messages, without asking at `access: "all"`.
+- `SECURITY.md`'s token promise widens to exactly the six read-only Web API calls above, beside `auth.test` and
+  `conversations.mark`; `SLACK_API_METHODS` is the list, and a rate-limited answer carries Slack's `Retry-After`.
+- For Memory and jelly: every source's account and owner come from Slack's `auth.test`, as status's account does, so
+  `events_list` no longer reads the profile. The owner's label is the same everywhere, in pages, snapshots and
+  `probe`: the Slack username `auth.test` gives, rather than the profile's full name (`probe` still reads the profile,
+  its identity operation, to confirm the user). Without an `auth.test` answer a call is `UNAVAILABLE` (new code), or
+  status's own code.
 - For Memory: the cursor is source-contract's version 2, bound to the workspace and scope; pass it back with the same
   scope. A version 1 cursor is read once, for a call without a scope. A page holds at most 64 KB (it was 900 KB) and
   stops early with `more: true`.
+
+### Known limits
+
+- A failed `auth.test` is tried again only after 60 seconds: for up to a minute after one, the sources answer
+  `UNAVAILABLE`.
+- The account no longer falls back to the workspace's address or `default` when Slack names no team: it is always
+  `auth.test`'s team id. An organisation-wide install that `auth.test` names by its `E…` id gets that id, so a cursor
+  issued by 0.0.2 or earlier for such an install (or one that named the address or `default`) is refused with
+  `CURSOR_INVALID`; start again with `since`.
+- The Web API answers of `mentions_list` and `dms_list` and the Markdown of `slack_list_user_channels` that
+  `channels_list` reads are tested against recorded, invented answers in Slack's documented shapes, not a live Slack.
 
 ### Removed
 

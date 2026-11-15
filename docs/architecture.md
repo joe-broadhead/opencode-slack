@@ -31,17 +31,18 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 - `mark-read.ts`: `slack_mark_read` and its tools RPC method `mark_read`: it asserts its own action, then calls `conversations.mark`; `missing_scope` is `SCOPE_MISSING`.
 - `status-method.ts`: the tools RPC's `status` method, the same status model as the status RPC.
 - `events.ts`: `slack_events_list` and its tools RPC method. It parses Slack's answers (JSON, else the labelled Markdown lines), reads each confirmed channel after its cursor `ts`, halves a window too large for one call, screens out secrets, and reads only through the host's executors. The events, the page and the cursor are source-contract's (`events`, `cursor`).
-- `source.ts`: the source's `probe` (the workspace and owner, and no content) and `thread_read` (one listed event's thread, refused outside the confirmed channels).
+- `source.ts`: the sources' `probe` (the workspace and owner, and no content), `thread_read` (one listed event's thread, refused outside the confirmed channels) and `channels_list` (the workspace source's consent options).
+- `web-reads.ts`, `mentions.ts`, `dms.ts`: the `slack.mentions` (events) and `slack.dms` (an `inbox` snapshot) sources, after @domeevans's structured reads: Slack's Web API through `slack-api.ts`, each call asserting `slack.read` on `<workspace>:<method>` first, rate limits waited out at most twice.
 
 ## Runtime flow
 
 1. Setup parses the options and checks the host version. On invalid options, or a host outside the supported range, it registers only the status surfaces.
 2. Without `oauth.client_id`, it adds **Slack app client ID** to `/connect` and reads the stored client from OpenCode's credential store.
 3. The MCP transform registers `https://mcp.slack.com/mcp` with that client, or nothing when there is none. A tool transform gives the server's Code Mode namespace its description (`NAMESPACE_DESCRIPTION` in `tools.ts`) and adds `slack_events_list` and `slack_mark_read` to it.
-4. When the plugin is set up, the tools RPC registers after the status RPC, for the server `slack`, with `events_list`, `probe`, `thread_read`, `mark_read` and `status` as its owned methods. It is a conflict while `nameInUse` is set.
+4. When the plugin is set up, the tools RPC registers after the status RPC, for the server `slack`, with `events_list`, `probe`, `thread_read`, `channels_list`, `mentions_list`, `dms_list`, `mark_read` and `status` as its owned methods. It is a conflict while `nameInUse` is set.
 5. A background listener handles `credential.updated` and `credential.switched` (the client changed: `ctx.mcp.reload()`) and `integration.updated` (OpenCode re-registered the server's integration: rename it **Slack** again). Setup's cleanup stops it.
 
-The plugin defines two tools. `slack_events_list` reads only through the host's executors. `slack_mark_read` and status's account make the plugin's only network requests: `conversations.mark` and `auth.test`, through `slack-api.ts`, the one place the plugin reads the Slack token.
+The plugin defines two tools. `slack_events_list` reads only through the host's executors. `slack_mark_read`, status's account and the `slack.mentions` and `slack.dms` sources make the plugin's only network requests: the eight Web API methods of `SLACK_API_METHODS`, through `slack-api.ts`, the one place the plugin reads the Slack token.
 
 ## Tools RPC
 
