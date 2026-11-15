@@ -435,6 +435,19 @@
         "id": "slack",
         "label": "Slack",
         "server": "slack",
+        "scopes": [
+          "channels:history",
+          "channels:read",
+          "im:history",
+          "im:read",
+          "mpim:history",
+          "mpim:read",
+          "search:read.im",
+          "search:read.mpim",
+          "search:read.private",
+          "search:read.public",
+          "users:read"
+        ],
         "after": "app",
         "relay": {}
       }
