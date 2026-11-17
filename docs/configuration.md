@@ -11,7 +11,7 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "github:joe-broadhead/opencode-slack#v0.0.4",
+      "package": "github:joe-broadhead/opencode-slack#v0.0.5",
       "options": {
         "oauth": {
           "client_id": "YOUR_SLACK_CLIENT_ID",
@@ -465,7 +465,7 @@ events_list({ since?, cursor?, limit?, account?, source?, scope?: { channels } }
   → { plugin, source: "slack", account, owner: { id, label }, scope?, events, refused?, gap?, cursor, more, trust: "untrusted" }
 ```
 
-It is the `slack.workspace` source that `package.json`'s top-level `sources` key declares under source-contract version 1 (`github:we-the-rebel-alliance/source-contract#v0.1.0`, bundled into `dist/index.js`): kind `events`, reading `message`, the scope key `channels`, the detail read `slack.workspace.thread`, the operations `slack_read_user_profile`, `slack_read_channel` and `slack_read_thread` (the first is the identity operation, which only `probe` asserts), private, free, at most 64 KB a page, links to `*.slack.com`, and the tools RPC `slack.workspace.tools` with the probe action `slack_probe`. A consumer (Memory, jelly, Artifacts) reads that declaration from the installed package and reads under the person's grant. `npm run check` runs the contract's conformance kit over `events_list`, `probe` and `thread_read`, with Slack's answers from `test/fixtures/conformance.json` and no live call, and writes its report to `reports/conformance-report.json` for the release.
+It is the `slack.workspace` source that `package.json`'s top-level `sources` key declares under source-contract version 1 (`github:we-the-rebel-alliance/source-contract#v0.2.0`, bundled into `dist/index.js`): kind `events`, reading `message`, the scope key `channels`, the detail read `slack.workspace.thread`, the operations `slack_read_user_profile`, `slack_read_channel` and `slack_read_thread` (the first is the identity operation, which only `probe` asserts), private, free, at most 64 KB a page, links to `*.slack.com`, and the tools RPC `slack.workspace.tools` with the probe action `slack_probe`. A consumer (Memory, jelly, Artifacts) reads that declaration from the installed package and reads under the person's grant. `npm run check` runs the contract's conformance kit over `events_list`, `probe` and `thread_read`, with Slack's answers from `test/fixtures/conformance.json` and no live call, and writes its report to `reports/conformance-report.json` for the release.
 
 - **What it lists**, oldest first: the messages posted in the conversations `scope.channels` names, read one at a time with `slack_read_channel` and `oldest`. With `events.channels` set, only the scope's conversations it also lists are read, so a scope never widens the option; without a scope, the option's conversations are read. A scope is at most 16 ids, and any key but `channels` is `INPUT_INVALID`. It never uses the private search, never reads a file, and calls nothing that asks under the default rules. A thread's replies are listed only when Slack shows them in the channel (sent to the channel too); a channel read does not include the rest, which `thread_read` reads. With no channel to read, it lists nothing and says so.
 - **Refused**: a message whose text holds a secret (source-contract's screening: an API key, a token, a password assignment) is left out for good and named in `refused[]` with the reason `secret`, never its text. The cursor moves past it.
@@ -549,7 +549,7 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | none: a shadowed skill | connected | Move or rename the skill at `<path>`, so that this plugin's slack-search skill loads, then run opencode reload. |
 | none: agents without default rules | connected | Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools. |
 | `STATUS_UNAVAILABLE` | none: status itself failed | Run /slack-status again in a moment (in the dialog: press r to retry). |
-| `SKILLS_INVALID` | none: the plugin does not load | Reinstall the plugin: opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.4, then opencode plugin add github:joe-broadhead/opencode-slack#v0.0.4, then opencode reload. A bundled skill is missing or has invalid frontmatter. |
+| `SKILLS_INVALID` | none: the plugin does not load | Reinstall the plugin: opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.5, then opencode plugin add github:joe-broadhead/opencode-slack#v0.0.5, then opencode reload. A bundled skill is missing or has invalid frontmatter. |
 | `INPUT_INVALID` | none: `slack_events_list` | Pass since, cursor, limit, account or source as events_list's schema describes them. |
 | `SOURCE_UNKNOWN` | none: `slack_events_list` | Leave "source" out, or pass "slack". |
 | `CURSOR_INVALID` | none: `slack_events_list` | Call events_list without a cursor, with since, to start again. |
