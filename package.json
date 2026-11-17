@@ -93,7 +93,7 @@
     "@opentui/solid": "0.8.0",
     "@types/babel__core": "7.20.5",
     "@types/bun": "1.4.3",
-    "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#v0.1.0",
+    "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#v0.2.0",
     "babel-preset-solid": "1.9.16",
     "esbuild": "0.28.2",
     "solid-js": "1.9.17",

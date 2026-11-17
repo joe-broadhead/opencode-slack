@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- source-contract is pinned at v0.2.0 (`github:we-the-rebel-alliance/source-contract#v0.2.0`), still bundled into
+  `dist/index.js` with no runtime dependency. The declaration and every read are unchanged and carry none of the keys
+  v0.2.0 adds (`removals[]`, an owner's `verified`, `permission.identityRules`, `permission.readsIdentity`,
+  `accounts.server`, a price's `conditions` or `min`, an empty `permission.identity`), so jelly, Memory and Artifacts on
+  v0.1.x read them as before.
+- The conformance report names contract 0.2.0 and the kit's two new checks: `gap-once-per-read` runs for
+  `slack.workspace` and `slack.mentions`, and `removals-are-final` is not applicable, as no source sends `removals[]`.
+  Both keep their `atomicPages` reasons; neither needs `noExpiry`, since a cursor older than the 90 days a source reads
+  back answers a gap, and that case still runs.
+- CI can be run by hand (`workflow_dispatch`), on all four runners as a push to master is; the concurrency group names
+  the event, so a hand run and a push or pull request run on the same ref do not share a group.
+
 ## [0.0.4] - 2026-11-15
 
 ### Changed
