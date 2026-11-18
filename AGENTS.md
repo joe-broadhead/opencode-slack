@@ -43,7 +43,7 @@ This repository builds `@joe-broadhead/opencode-slack`, an unofficial OpenCode p
 
 - `npm ci --ignore-scripts`, then `npm run check`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - The stages are `typecheck`, `copies`, `build`, `unit`, `conformance` (source-contract's kit over the source, offline; it writes `reports/conformance-report.json` for the release), `kit`, `tui`, `host`, `pack`, `icons` and `actionlint` (a notice when `actionlint` is not on PATH). CI runs `actionlint` in its own job.
-- Host tests run on every release in `TESTED_HOSTS`, 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7, 2.3.0, 2.3.1 and 2.3.2, and the pack stage runs every stock binary too.
+- Host tests run on every release in `TESTED_HOSTS`, 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7, 2.3.0, 2.3.1 and 2.3.2, and the pack stage runs every stock binary too. The embedded host is the dev pin (2.2.3), whose Code Mode runs as a schedule's `if: { code }` check; a stock 2.3.1 or later has `experimental.automation` instead, and the suite creates its code action over raw HTTP (the 2.2.3 client has no automation methods) and reads the run's outcome back (`unattended` in `test/host/harness.ts`).
 - Host tests run OpenCode with HOME, `OPENCODE_TEST_HOME`, XDG directories and TMPDIR inside a temporary root, which is a git repository under the system's `/tmp` (never under TMPDIR or HOME), each stock host on its own port, and never call Slack.
 - `test/host/slack-catalog.ts` holds Slack's live tool schemas; the fake server serves them and `test/unit/docs.test.ts` checks every parameter the skill and the docs name against them. Refresh it when Slack changes a tool; `npm run drift` compares the reads with a live, signed-in OpenCode (manual, not part of `check`).
 - Do not skip, weaken or delete a test to get green.
