@@ -213,6 +213,6 @@ describe("tested hosts", () => {
   test("the untested example is 2.2.99, and no doc names a future release as tested", () => {
     const all = SOURCES.map(([, text]) => text).join("\n")
     expect(all).toContain("2.2.99")
-    expect(all).not.toMatch(/\b(?:2\.2\.(?:8|9[0-8])|2\.3\.[1-9]\d*)\b(?!\d)/)
+    expect(all).not.toMatch(/\b(?:2\.2\.(?:8|9[0-8]|[1-9]\d{2,})|2\.3\.(?:[3-9]|[1-9]\d+))\b(?!\d)/)
   })
 })

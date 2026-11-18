@@ -19,12 +19,12 @@ To try a checkout in OpenCode, build it with `npm run build` and point a `plugin
 
 ## Checks
 
-`npm run check` runs, in order: the type check of `src`, `scripts` and `test` (`tsc` emits nothing); the build, which bundles `dist/index.js` and `dist/tui.js` with esbuild (`scripts/build.ts`); the unit tests (including the forbidden-API scan); the conformance stage (`scripts/conformance.ts`), which runs source-contract's conformance kit over `events_list`, `probe` and `thread_read` with Slack's answers from `test/fixtures/conformance.json`, makes no live call, and writes `reports/conformance-report.json`, the report a release attaches; the TUI tests against the built dialog; the host tests on the embedded `@opencode/sdk` and on stock `opencode` 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7 and 2.3.0 (`TESTED_HOSTS` in `src/defaults.ts`, the one list of tested releases); and the package test, which packs, installs and loads the tarball and checks that `dist/` holds only the two self-contained bundles. CI runs `npm ci --ignore-scripts` and `npm run check` on Linux and macOS, x64 and arm64.
+`npm run check` runs, in order: the type check of `src`, `scripts` and `test` (`tsc` emits nothing); the build, which bundles `dist/index.js` and `dist/tui.js` with esbuild (`scripts/build.ts`); the unit tests (including the forbidden-API scan); the conformance stage (`scripts/conformance.ts`), which runs source-contract's conformance kit over `events_list`, `probe` and `thread_read` with Slack's answers from `test/fixtures/conformance.json`, makes no live call, and writes `reports/conformance-report.json`, the report a release attaches; the TUI tests against the built dialog; the host tests on the embedded `@opencode/sdk` and on stock `opencode` 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7, 2.3.0, 2.3.1 and 2.3.2 (`TESTED_HOSTS` in `src/defaults.ts`, the one list of tested releases); and the package test, which packs, installs and loads the tarball and checks that `dist/` holds only the two self-contained bundles. CI runs `npm ci --ignore-scripts` and `npm run check` on Linux and macOS, x64 and arm64.
 
 By default, the host and package tests install `@opencode/cli` from npm into a temporary directory, once per version and run. To use binaries you already have:
 
 ```sh
-OPENCODE_BIN_2_2_3=/path/to/2.2.3/opencode OPENCODE_BIN_2_2_4=/path/to/2.2.4/opencode OPENCODE_BIN_2_2_5=/path/to/2.2.5/opencode OPENCODE_BIN_2_2_6=/path/to/2.2.6/opencode OPENCODE_BIN_2_2_7=/path/to/2.2.7/opencode OPENCODE_BIN_2_3_0=/path/to/2.3.0/opencode npm run check
+OPENCODE_BIN_2_2_3=/path/to/2.2.3/opencode OPENCODE_BIN_2_2_4=/path/to/2.2.4/opencode OPENCODE_BIN_2_2_5=/path/to/2.2.5/opencode OPENCODE_BIN_2_2_6=/path/to/2.2.6/opencode OPENCODE_BIN_2_2_7=/path/to/2.2.7/opencode OPENCODE_BIN_2_3_0=/path/to/2.3.0/opencode OPENCODE_BIN_2_3_1=/path/to/2.3.1/opencode OPENCODE_BIN_2_3_2=/path/to/2.3.2/opencode npm run check
 ```
 
 `npm install --prefix <dir> --ignore-scripts @opencode/cli@2.2.3` gets one; the binary is `node_modules/@opencode/cli-<os>-<arch>/bin/opencode` in that directory. The tests check each binary's version and that OpenCode's paths stay inside the test's temporary root. Each root is a git repository under the system's `/tmp`, never under `TMPDIR` or your home, so OpenCode cannot pick up your own `.opencode` agents or skills; each stock host listens on its own free port. They never call Slack.
@@ -109,7 +109,7 @@ Before the approval, the workflow:
 - **verifies** on a fresh runner: the commit's identity, one parent on `master`, `package.json` exactly the parent's
   without the lifecycle scripts, only regular files in the allowed paths, no `package.json` under `dist/`, and a second,
   independent build of the parent (its own job) equal to the committed `dist/` byte for byte;
-- **installs** the release commit with `plugin add` on each stock OpenCode host (2.2.3 to 2.2.7, and 2.3.0);
+- **installs** the release commit with `plugin add` on each stock OpenCode host (2.2.3 to 2.3.2);
 - **packs** the commit before installing anything, keeps that tarball and records its sha256, then runs the pack stage
   against a copy;
 - **runs the conformance kit** on the parent, for a plugin that declares sources (above), and uploads only its report;
