@@ -41,10 +41,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # GitHub-hosted runners: Linux x64, Linux arm64, macOS arm64, macOS x64.
-        # A pull request runs the two Linux runners; a push to master, or a run by hand, runs all four, macOS too. macOS
+        # GitHub-hosted runners: Linux x64, Linux arm64, macOS arm64.
+        # A pull request runs the two Linux runners; a push to master, or a run by hand, runs three: macOS arm64 too. macOS
         # runs on master and for releases only, and the release planner requires that push run with every runner.
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04","ubuntu-24.04-arm"]' || '["ubuntu-24.04","ubuntu-24.04-arm","macos-26","macos-26-intel"]') }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04","ubuntu-24.04-arm"]' || '["ubuntu-24.04","ubuntu-24.04-arm","macos-26"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
