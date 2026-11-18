@@ -155,7 +155,7 @@ describe("buildStatus states", () => {
   })
 
   test("each tested release reads tested, with the supported range", () => {
-    for (const version of ["2.2.3", "2.2.4", "2.2.5", "2.2.6", "2.2.7", "2.3.0"])
+    for (const version of ["2.2.3", "2.2.4", "2.2.5", "2.2.6", "2.2.7", "2.3.0", "2.3.1", "2.3.2"])
       expect(formatStatus(buildStatus(input({ hostVersion: version })))).toContain(`OpenCode: ${version} (tested; supported range >=2.2.3 <2.4.0)`)
   })
 

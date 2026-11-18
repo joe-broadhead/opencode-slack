@@ -78,7 +78,7 @@ describe("setup with a client ID in the options", () => {
 
   test("the status RPC carries the plugin's version from package.json and the tested host", async () => {
     const { version } = JSON.parse(await Bun.file(new URL("../../package.json", import.meta.url)).text()) as { version: string }
-    for (const host of ["2.2.3", "2.2.4", "2.2.5", "2.2.6", "2.2.7", "2.3.0"])
+    for (const host of ["2.2.3", "2.2.4", "2.2.5", "2.2.6", "2.2.7", "2.3.0", "2.3.1", "2.3.2"])
       expect(await (await setUp({ version: host })).status()).toMatchObject({ version, host: { version: host, range: ">=2.2.3 <2.4.0", tested: true } })
   })
 

@@ -9,7 +9,7 @@ import type { Status } from "../../src/status.js"
 import { METHODS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { classify } from "../../src/tools.js"
 import { fakeInput, FAKE_TOOLS, UPSTREAM_FAILURE } from "./fake-slack-mcp.js"
-import { CLIENT_ID, HOSTED_OAUTH, REPO, repositoryChanges, SHADOWING_SKILL, TEMP, USER_SERVER, type Host, type Project } from "./harness.js"
+import { CLIENT_ID, HOSTED_OAUTH, REPO, repositoryChanges, SHADOWING_SKILL, TEMP, unattended, USER_SERVER, type Host, type Project } from "./harness.js"
 import type { Outcome } from "./probe/index.js"
 
 interface ProbeState {
@@ -58,21 +58,14 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
     }
 
     /**
-     * Runs `code` as Code Mode does, through a schedule's check program: OpenCode checks each tool's input and output
-     * and evaluates permissions with nobody present to answer a prompt. The program reports by throwing "SEEN <json>",
-     * so no schedule is ever created and no model is involved.
+     * Runs `code` as Code Mode does, through a schedule's check program up to 2.3.0 and a stock server's automation
+     * code action from 2.3.1: OpenCode checks each tool's input and output and evaluates permissions with nobody present
+     * to answer a prompt. The program reports by throwing "SEEN <json>", so nothing is left behind and no model is
+     * involved.
      */
     async function codeMode(project: Project, sessionID: string, code: string): Promise<{ seen: unknown } | { refused: string }> {
-      let message: string
-      try {
-        const schedule = await host.client.experimental.schedule.create({
-          sessionID, name: "slack-host-test", when: { in: "6 hours" }, prompt: "noop", if: { code }, ...at(project),
-        } as never)
-        await host.client.experimental.schedule.delete({ scheduleID: schedule.id, ...at(project) } as never)
-        throw new Error("the check program finished without reporting")
-      } catch (error) {
-        message = error instanceof Error ? error.message : String(error)
-      }
+      const outcome = await unattended(host, sessionID, code, at(project))
+      const message = outcome.ok ? "the check program finished without reporting" : outcome.error
       const seen = /SEEN (.*)$/s.exec(message)
       if (!seen) return { refused: message }
       try {
