@@ -2,12 +2,11 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.6] - 2026-11-18
 
 ### Changed
 
-- Admits OpenCode 2.3.1 and 2.3.2: the host range is unchanged, `>=2.2.3 <2.4.0`, tested on 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7, 2.3.0, 2.3.1 and 2.3.2.
-  `TESTED_HOSTS` in `src/defaults.ts` is the list the host and pack tests and CI read.
+- Admits OpenCode 2.3.1 and 2.3.2: `TESTED_HOSTS` in `src/defaults.ts` is the list the host and pack tests and CI read, tested on OpenCode 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7, 2.3.0, 2.3.1 and 2.3.2, with the supported range unchanged (`>=2.2.3 <2.4.0`).
 
 ## [0.0.5] - 2026-11-17
 
