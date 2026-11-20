@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows [Kee
   longer fails with `UPSTREAM_UNREADABLE`. `channels_list` reads the same wrapper, so the consent's channel picker lists
   the person's conversations instead of none. An output with other keys (`slack_read_channel`'s `messages` and
   `pagination_info`) is unchanged. The declaration, the Web API reads and the permissions are unchanged.
+- `channels_list` reads only the structure of Slack's Markdown: a `###` heading with its own `- **ID:**` line right after it
+  is an option, labelled by the heading, and the cursor is the quoted token of the last `Pagination:` line. A channel's
+  Purpose or Topic, which other members can edit, can no longer add an option or set the cursor, and a cursor that
+  repeats ends the list instead of reading the same page again.
 
 ### Changed
 

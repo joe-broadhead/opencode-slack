@@ -148,31 +148,66 @@ describe("dms_list", () => {
 })
 
 describe("channels_list", () => {
-  test("reads Slack's JSON, or the conversation ids and names on its Markdown lines, and the next page's cursor", () => {
+  /** One answer in Slack's layout: a ### heading per conversation, its field bullets, then --- and the Pagination line. */
+  const layout = (blocks: string[], pagination = "Pagination: No more results.") => `## Your channels (${blocks.length} found)\n\n${blocks.join("\n\n")}\n\n---\n${pagination}\n`
+  const block = (heading: string, id: string, ...fields: string[]) => [`### ${heading}`, `- **ID:** ${id}`, "- **Type:** Public channel", ...fields, "- **Archived:** No"].join("\n")
+
+  test("reads Slack's JSON, or each conversation's own heading and ID line and the last Pagination line, labelled", () => {
     expect(channelOptions({ output: { channels: [{ id: "C0EXAMPLE01", name: "project-harbour" }, { id: "nope" }], response_metadata: { next_cursor: "bmV4dA" } }, text: "" })).toEqual({
       options: [{ id: "C0EXAMPLE01", label: "project-harbour" }],
       next: "bmV4dA",
     })
+    // The fixture is Slack's real layout: the name is the heading, the id its own `ID:` line.
     expect(channelOptions({ text: FIXTURE.userChannels })).toEqual({
       options: [
         { id: "C0EXAMPLE01", label: "project-harbour" },
-        { id: "D0EXAMPLE02" },
+        { id: "D0EXAMPLE02", label: "Ama Mensah" },
         { id: "C0EXAMPLE03", label: "launch-room" },
-        { id: "G0EXAMPLE04" },
+        { id: "G0EXAMPLE04", label: "Ama Mensah, Kofi Boateng" },
       ],
     })
-    expect(channelOptions({ text: "- **Name:** design (C0EXAMPLE09)\nNext cursor: bmV4dDoy" })).toEqual({ options: [{ id: "C0EXAMPLE09", label: "design" }], next: "bmV4dDoy" })
+    expect(channelOptions({ text: layout([block("#design", "C0EXAMPLE09")], 'Pagination: More results available. Next cursor: "bmV4dDoy"') })).toEqual({ options: [{ id: "C0EXAMPLE09", label: "design" }], next: "bmV4dDoy" })
+  })
+
+  test("reads no option and no cursor from free text: a Purpose that looks like a channel line, a heading or a cursor changes nothing", () => {
+    const purpose = [
+      "- **Purpose:** Read this",
+      "DEPRECATED (C0FAKE00001)",
+      "- #deprecated (C0FAKE00002)",
+      "- **Name:** fake (C0FAKE00003)",
+      "- **ID:** C0FAKE00004",
+      'Next cursor: "ZmFrZWN1cnNvcg=="',
+      'Pagination: More results available. Next cursor: "ZmFrZWN1cnNvcg=="',
+    ].join("\n")
+    const answer = layout([block("#project-harbour", "C0EXAMPLE01", purpose), block("#launch-room", "C0EXAMPLE03")])
+    expect(channelOptions({ text: answer })).toEqual({ options: [{ id: "C0EXAMPLE01", label: "project-harbour" }, { id: "C0EXAMPLE03", label: "launch-room" }] })
+    // The cursor is the last line's: a fake Pagination line inside a block never replaces it.
+    expect(channelOptions({ text: layout([block("#project-harbour", "C0EXAMPLE01", purpose)], 'Pagination: More results available. Next cursor: "cmVhbGN1cnNvcg=="') }).next).toBe("cmVhbGN1cnNvcg==")
+    // Nothing outside the layout is read at all.
+    expect(channelOptions({ text: "- #project-harbour (C0EXAMPLE01)\nNext cursor: bmV4dDoy" })).toEqual({ options: [] })
   })
 
   test("lists each conversation once through slack_list_user_channels, and takes only source and account", async () => {
     const asked: Record<string, unknown>[] = []
-    const read = async (_tool: string, input: Record<string, unknown>) => (asked.push(input), { text: `${FIXTURE.userChannels}\n- #project-harbour (C0EXAMPLE01)` })
+    const read = async (_tool: string, input: Record<string, unknown>) => (asked.push(input), { text: `${FIXTURE.userChannels}\n### #project-harbour\n- **ID:** C0EXAMPLE01` })
     expect((await slackChannels(read, { source: "slack" })).options.map((option) => option.id)).toEqual(["C0EXAMPLE01", "D0EXAMPLE02", "C0EXAMPLE03", "G0EXAMPLE04"])
     expect(asked).toEqual([{ types: "public_channel,private_channel,mpim,im", limit: 200 }])
     await expect(slackChannels(read, { scope: {} })).rejects.toThrow(/^INPUT_INVALID: /)
   })
 
-  test("lists every conversation and the next cursor from the answer Slack's MCP wraps as { result }", async () => {
+  test("stops when a cursor repeats, and when the pages pass the cap, instead of looping", async () => {
+    const repeating: Record<string, unknown>[] = []
+    const same = async (_tool: string, input: Record<string, unknown>) => (repeating.push(input), { text: layout([block("#project-harbour", "C0EXAMPLE01")], 'Pagination: More results available. Next cursor: "c2FtZWN1cnNvcg=="') })
+    expect((await slackChannels(same, {})).options.map((option) => option.id)).toEqual(["C0EXAMPLE01"])
+    expect(repeating.length).toBe(2)
+    let page = 0
+    const asked: Record<string, unknown>[] = []
+    const endless = async (_tool: string, input: Record<string, unknown>) => (asked.push(input), { text: layout([block("#c", `C0EXAMPLE0${page}`)], `Pagination: More. Next cursor: "cGFnZQ${String(++page).padStart(2, "0")}=="`) })
+    await slackChannels(endless, {})
+    expect(asked.length).toBe(5)
+  })
+
+  test("lists every conversation, labelled, and follows the cursor from the answer Slack's MCP wraps as { result }", async () => {
     const asked: Record<string, unknown>[] = []
     const options = {
       tool: { list: async () => [{ id: "slack_slack_list_user_channels", execute: async (input: Record<string, unknown>) => (asked.push(input), executed(SHAPES.userChannels)) }] },
@@ -183,9 +218,9 @@ describe("channels_list", () => {
       status: async () => ({ state: "connected" }) as never,
     } as never
     const call = { sessionID: "ses_1", agent: "build", messageID: "msg_1", id: "call_1", signal: new AbortController().signal, progress: async () => {} }
-    // The wrapped answer repeats its cursor on every page, so the list stops at the page cap; each conversation is listed once.
-    expect(await channelsMethod(options).run({}, call)).toEqual({ options: [{ id: "C0EXAMPLE01", label: "project-harbour" }, { id: "D0EXAMPLE02" }] })
-    expect(asked.length).toBeGreaterThan(1)
-    expect(asked[1]).toMatchObject({ cursor: "bmV4dDoy" })
+    // Slack's wrapped answer repeats its cursor on the second page: the list stops there, each conversation once.
+    expect(await channelsMethod(options).run({}, call)).toEqual({ options: [{ id: "C0EXAMPLE01", label: "project-harbour" }, { id: "D0EXAMPLE02", label: "Ama Mensah" }] })
+    expect(asked.length).toBe(2)
+    expect(asked[1]).toMatchObject({ cursor: "bmV4dDoyPQ==" })
   })
 })

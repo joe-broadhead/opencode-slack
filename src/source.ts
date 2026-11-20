@@ -260,19 +260,29 @@ export function channelOptions(answer: { readonly output?: unknown; readonly tex
     const next = label(meta["next_cursor"]) ?? label(data["next_cursor"])
     return next === undefined ? { options } : { options, next }
   }
+  return channelLayout(answer.text)
+}
+
+/**
+ * Slack's Markdown answer: a `### <name>` heading per conversation, directly followed by its own `- **ID:**` line, then
+ * its other field bullets (a Purpose or Topic is other members' text), and last a `---` line and the `Pagination:` line.
+ * Only that structure is read: an option is a heading with its ID line right after, and the cursor is the quoted token
+ * on the answer's last line. A line inside a field's free text never names an option or a cursor.
+ */
+function channelLayout(text: string): { options: ChannelOption[]; next?: string } {
+  const lines = text.split(/\r?\n/)
   const options: ChannelOption[] = []
-  let next: string | undefined
-  for (const line of answer.text.split(/\r?\n/)) {
-    if (/cursor/i.test(line)) {
-      next = NEXT_CURSOR.exec(line)?.[1] ?? next
-      continue
-    }
-    const id = LISTED_ID.exec(line)?.[1]
-    if (id === undefined) continue
-    const name = /#([A-Za-z0-9._-]{1,80})/.exec(line)?.[1] ?? /\bname\W{0,4}[:=]\s*\**\s*([^|*(\n]+)/i.exec(line)?.[1]
-    const named = label(name)
-    options.push({ id, ...(named === undefined ? {} : { label: named }) })
-  }
+  lines.forEach((line, index) => {
+    const heading = /^###[ \t]+(.+?)\s*$/.exec(line)
+    if (heading === null || (index > 0 && lines[index - 1]!.trim() !== "")) return
+    const id = /^- \*\*ID:\*\*[ \t]*`?([CDG][A-Z0-9]{8,12})`?\s*$/.exec(lines[index + 1] ?? "")?.[1]
+    const name = heading[1]!.replace(/^#+/, "").trim().replace(/\s+/g, " ").slice(0, 120)
+    if (id !== undefined) options.push({ id, ...(name === "" ? {} : { label: name }) })
+  })
+  let end = lines.length - 1
+  while (end >= 0 && lines[end]!.trim() === "") end--
+  const last = end < 0 ? "" : lines[end]!.trimEnd()
+  const next = /^Pagination:/.test(last) && lines[end - 1]?.trim() === "---" ? (/"([A-Za-z0-9+/=_-]{6,})"\s*$/.exec(last)?.[1] ?? NEXT_CURSOR.exec(last)?.[1]) : undefined
   return next === undefined ? { options } : { options, next }
 }
 
@@ -284,12 +294,15 @@ export async function slackChannels(read: Read, input: unknown): Promise<{ optio
     throw eventsError("INPUT_INVALID", "The channels_list input is invalid: it takes only source and account.", `Pass {} or { "source": "${SLACK_SOURCE}" }.`)
   }
   const seen = new Map<string, ChannelOption>()
+  const used = new Set<string>()
   let cursor: string | undefined
   for (let page = 0; page < LIST_PAGES && seen.size < MAX_OPTIONS; page++) {
     const listed = channelOptions(await read("slack_list_user_channels", { types: "public_channel,private_channel,mpim,im", limit: 200, ...(cursor === undefined ? {} : { cursor }) }))
     for (const option of listed.options) if (!seen.has(option.id) && seen.size < MAX_OPTIONS) seen.set(option.id, option)
+    // A cursor already used would read the same page again: stop.
+    if (listed.next === undefined || used.has(listed.next)) break
     cursor = listed.next
-    if (cursor === undefined) break
+    used.add(cursor)
   }
   return { options: [...seen.values()] }
 }

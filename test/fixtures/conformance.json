@@ -85,7 +85,7 @@
       }
     ]
   },
-  "userChannels": "# Your channels\n- #project-harbour (C0EXAMPLE01)\n- Direct message with Ama Mensah (D0EXAMPLE02)\n- #launch-room (C0EXAMPLE03)\n- Group message: Ama Mensah, Kofi Boateng (G0EXAMPLE04)\nNo more pages.",
+  "userChannels": "## Your channels (4 found)\n\n### #project-harbour\n- **ID:** C0EXAMPLE01\n- **Type:** Public channel\n- **Purpose:** Harbour project\n- **Archived:** No\n\n### Ama Mensah\n- **ID:** D0EXAMPLE02\n- **Type:** Direct message\n- **Members:** Ama Mensah: @ama.mensah, @pilot.owner\n- **Archived:** No\n\n### #launch-room\n- **ID:** C0EXAMPLE03\n- **Type:** Public channel\n- **Purpose:** Launch\n- **Archived:** No\n- **Slack Connect:** No\n\n### Ama Mensah, Kofi Boateng\n- **ID:** G0EXAMPLE04\n- **Type:** Group message\n- **Members:** @ama.mensah, @kofi.boateng, @pilot.owner\n- **Archived:** No\n\n---\nPagination: No more results.\n",
   "webApi": {
     "assistant.search.context": [
       {
