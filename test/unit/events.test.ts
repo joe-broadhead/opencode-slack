@@ -6,10 +6,11 @@ import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
 import { encodeCursor } from "@we-the-rebel-alliance/source-contract/cursor"
 import { assertEventsListConformance, EVENT_LIMITS, resultProblems, type EventsListInput, type EventsListResult } from "@we-the-rebel-alliance/source-contract/events"
-import { channelPage, eventsMethod, eventsTool, EVENTS_ACTION, MAX_CHANNELS, messageEvent, micros, profileOf, RETENTION_DAYS, textMessages, tsOf, type EventsToolOptions } from "../../src/events.js"
+import { channelPage, eventsMethod, eventsTool, EVENTS_ACTION, MAX_CHANNELS, messageEvent, micros, profileOf, reader, RETENTION_DAYS, textMessages, tsOf, type EventsToolOptions } from "../../src/events.js"
 import type { Identity } from "../../src/identity.js"
 import type { ToolCall } from "../../src/host/tools-rpc.js"
 import type { Status } from "../../src/status.js"
+import { executed, SHAPES } from "../support/answer-shapes.js"
 
 const NOW = Date.parse("2026-11-08T12:00:00Z")
 const SINCE = "2026-11-01T00:00:00Z"
@@ -211,6 +212,42 @@ describe("slack_events_list", () => {
     expect(profileOf({ output: { user: { id: "U0SAM00001", real_name: "Sam Rivera", team_id: "T0ACME0001" } }, text: "" })).toEqual({ owner: OWNER, team: "T0ACME0001" })
     expect(profileOf({ output: { id: "U0SAM00001", profile: { display_name: "sam" } }, text: "" })).toEqual({ owner: { id: "slack:U0SAM00001", label: "sam" } })
     expect(() => profileOf({ text: "**Real Name:** Sam Rivera" })).toThrow(/^UPSTREAM_UNREADABLE: Slack's slack_read_user_profile/)
+  })
+
+  // Slack's MCP answers some tools as { result: <Markdown> } (test/fixtures/answer-shapes.json): the reader hands the Markdown on.
+  describe("reader, on an answer Slack's MCP wraps as { result }", () => {
+    const tools = (answer: unknown) => ({ tool: { list: (async () => [{ id: "slack_slack_read_user_profile", execute: async () => answer }]) as never }, owned: () => true, status: async () => connected })
+    const read = (answer: unknown) => reader(tools(answer), context)("slack_read_user_profile", {})
+
+    test("names the signed-in user from the wrapped Markdown", async () => {
+      expect(profileOf(await read(executed(SHAPES.profile))).owner.id).toBe("slack:U00CURRENTUSER")
+    })
+
+    test("unwraps the same object when it comes only as one line of JSON text", async () => {
+      expect(profileOf(await read({ content: [{ type: "text", text: JSON.stringify(SHAPES.profile) }] })).owner.id).toBe("slack:U00CURRENTUSER")
+    })
+
+    test("still refuses a wrapped profile with no User ID", async () => {
+      await expect(read({ output: { result: "# User profile\nReal Name: Pilot Owner" }, content: [] }).then(profileOf)).rejects.toThrow(/^UPSTREAM_UNREADABLE: Slack's slack_read_user_profile/)
+    })
+
+    test("leaves a structured answer alone: slack_read_channel's { messages, pagination_info }", async () => {
+      const answer = await read(executed(SHAPES.readChannel))
+      expect(answer.output).toEqual(SHAPES.readChannel)
+      expect(channelPage(answer).messages.map((item) => item.user)).toEqual(["U012AB3CD"])
+    })
+
+    test("the recorded shapes are the ones the fix reads: a lone result string, and a channel answer with other keys", () => {
+      expect(Object.keys(SHAPES.profile)).toEqual(["result"])
+      expect(Object.keys(SHAPES.userChannels)).toEqual(["result"])
+      expect(Object.keys(SHAPES.readChannel).sort()).toEqual(["messages", "pagination_info"])
+      expect(SHAPES.profile.result).toContain("\nUser ID: ")
+    })
+
+    test("does not unwrap an output that holds result beside other keys", async () => {
+      const output = { result: SHAPES.profile.result, extra: 1 }
+      expect((await read({ output, content: [{ type: "text", text: "" }] })).output).toEqual(output)
+    })
   })
 
   // Replaces "names the workspace by its address, or default": the account is always auth.test's team id now.

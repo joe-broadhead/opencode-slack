@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- `probe` binds `slack.mentions` and `slack.dms` (and a contract 1 `slack.workspace`) again. Slack's MCP answers
+  `slack_read_user_profile` and `slack_list_user_channels` as `{ result: <Markdown> }`, in the output and as one line of
+  JSON in the text; the shared reader now hands the Markdown on, so the profile's `User ID:` line reads and `probe` no
+  longer fails with `UPSTREAM_UNREADABLE`. `channels_list` reads the same wrapper, so the consent's channel picker lists
+  the person's conversations instead of none. An output with other keys (`slack_read_channel`'s `messages` and
+  `pagination_info`) is unchanged. The declaration, the Web API reads and the permissions are unchanged.
+- `channels_list` reads only the structure of Slack's Markdown: a `###` heading with its own `- **ID:**` line right after it
+  is an option, labelled by the heading, and the cursor is the quoted token of the last `Pagination:` line. A channel's
+  Purpose or Topic, which other members can edit, can no longer add an option or set the cursor, and a cursor that
+  repeats ends the list instead of reading the same page again.
+
 ### Changed
 
 - source-contract is pinned at v0.3.0 (`github:we-the-rebel-alliance/source-contract#v0.3.0`), still bundled into
