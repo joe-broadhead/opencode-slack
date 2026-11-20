@@ -11,6 +11,7 @@ import { identityOf } from "../../src/identity.js"
 import { PROBE_ACTION, probeMethod, slackProbe, slackThread, threadMethod, THREAD_READ_ACTION } from "../../src/source.js"
 import type { Status } from "../../src/status.js"
 import { EVENTS_LIST, PROBE } from "../../src/tools.js"
+import { executed, SHAPES } from "../support/answer-shapes.js"
 import { FIXTURE, conformanceReports, declaredSources, declaredTools, installed } from "../support/conformance.js"
 
 const WHO = signedInOf(identityOf(FIXTURE.authTest)!)
@@ -102,6 +103,35 @@ describe("probe", () => {
     expect(await method.run({}, call)).toMatchObject({ account: "T0EXAMPLE01" })
     expect(asserted).toEqual(["slack_probe"])
     expect(threadMethod(options, PAGE_OUTPUT)).toMatchObject({ name: "thread_read", action: "slack_slack_read_thread", class: "read" })
+  })
+})
+
+describe("probe, on the profile as Slack's MCP wraps it ({ result: <Markdown> })", () => {
+  const methodFor = (output: Record<string, unknown>) =>
+    probeMethod({
+      tool: { list: async () => [{ id: "slack_slack_read_user_profile", execute: async () => executed(output) }] },
+      permission: { assert: async () => {} },
+      channels: [],
+      owned: () => true,
+      identity: async () => identityOf(FIXTURE.authTest),
+      status: async () => ({ state: "connected" }) as unknown as Status,
+    } as unknown as EventsToolOptions)
+
+  test("names the auth.test owner for every source that binds through it, mentions and dms included", async () => {
+    const method = methodFor(SHAPES.profile)
+    for (const source of ["mentions", "dms", "slack"]) {
+      expect(await method.run({ source }, call)).toEqual({ source, account: "T0EXAMPLE01", owner: { id: "slack:U00CURRENTUSER", label: "pilot.owner" }, trust: "untrusted" })
+    }
+  })
+
+  test("answers UNAVAILABLE when the wrapped profile names another user", async () => {
+    const method = methodFor({ result: SHAPES.profile.result.replace("U00CURRENTUSER", "U012AB3CD") })
+    await expect(method.run({ source: "mentions" }, call)).rejects.toThrow(/^UNAVAILABLE: Slack's profile and its auth\.test name different users\./)
+  })
+
+  test("still answers UPSTREAM_UNREADABLE when the wrapped profile has no User ID", async () => {
+    const method = methodFor({ result: "# User profile\nReal Name: Pilot Owner" })
+    await expect(method.run({ source: "mentions" }, call)).rejects.toThrow(/^UPSTREAM_UNREADABLE: Slack's slack_read_user_profile/)
   })
 })
 

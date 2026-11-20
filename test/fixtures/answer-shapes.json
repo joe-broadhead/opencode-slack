@@ -1,0 +1,13 @@
+{
+  "$comment": "How Slack's hosted MCP server wraps the answers of its tools, as the host's executor hands them to the plugin: slack_read_user_profile and slack_list_user_channels answer { result: <Markdown> } as output, and the same object as one line of JSON in the content text; slack_read_channel answers { messages, pagination_info }. Shapes recorded 2026-11-20; every value is invented, the user is the placeholder U00CURRENTUSER. A change of wrapper must fail test/unit/answer-shapes.test.ts, not a source binding.",
+  "profile": {
+    "result": "# User profile\nUser ID: U00CURRENTUSER\nUsername: pilot.owner\nDisplay Name: pilot\nReal Name: Pilot Owner\nPronouns: they/them\nTitle: Tester\nEmail: pilot.owner@example.com\nOrganization Name: Example Workspace\nPhone: none\nStatus: none\nTimezone: UTC\nAdmin: false\nOwner: false\nBot: false\nRestricted: false"
+  },
+  "userChannels": {
+    "result": "# Your channels\n- #project-harbour (C0EXAMPLE01)\n  Type: public_channel\n  Purpose: Harbour project\n  Archived: false\n  Slack Connect: false\n- Direct message with Ama Mensah (D0EXAMPLE02)\n  Type: im\n  Archived: false\n  Slack Connect: false\nPagination: Next cursor: bmV4dDoy"
+  },
+  "readChannel": {
+    "messages": "=== Message 1 of 1 ===\nFrom: Ama Mensah (ID: U012AB3CD)\nMessage TS: 1794477600.000100\nText: Postgres or SQLite for the queue?\n",
+    "pagination_info": "No more messages."
+  }
+}

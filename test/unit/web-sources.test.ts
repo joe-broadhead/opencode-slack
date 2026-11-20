@@ -9,7 +9,8 @@ import { slackDms } from "../../src/dms.js"
 import { identityOf } from "../../src/identity.js"
 import { slackMentions } from "../../src/mentions.js"
 import type { SlackApiResult } from "../../src/slack-api.js"
-import { channelOptions, slackChannels } from "../../src/source.js"
+import { channelOptions, channelsMethod, slackChannels } from "../../src/source.js"
+import { executed, SHAPES } from "../support/answer-shapes.js"
 import type { Status } from "../../src/status.js"
 import { WEB_READ_ACTION, webReader, webSignedIn, type WebReadOptions } from "../../src/web-reads.js"
 import { FIXTURE, fakeApi } from "../support/conformance.js"
@@ -169,5 +170,22 @@ describe("channels_list", () => {
     expect((await slackChannels(read, { source: "slack" })).options.map((option) => option.id)).toEqual(["C0EXAMPLE01", "D0EXAMPLE02", "C0EXAMPLE03", "G0EXAMPLE04"])
     expect(asked).toEqual([{ types: "public_channel,private_channel,mpim,im", limit: 200 }])
     await expect(slackChannels(read, { scope: {} })).rejects.toThrow(/^INPUT_INVALID: /)
+  })
+
+  test("lists every conversation and the next cursor from the answer Slack's MCP wraps as { result }", async () => {
+    const asked: Record<string, unknown>[] = []
+    const options = {
+      tool: { list: async () => [{ id: "slack_slack_list_user_channels", execute: async (input: Record<string, unknown>) => (asked.push(input), executed(SHAPES.userChannels)) }] },
+      permission: { assert: async () => {} },
+      channels: [],
+      owned: () => true,
+      identity: async () => undefined,
+      status: async () => ({ state: "connected" }) as never,
+    } as never
+    const call = { sessionID: "ses_1", agent: "build", messageID: "msg_1", id: "call_1", signal: new AbortController().signal, progress: async () => {} }
+    // The wrapped answer repeats its cursor on every page, so the list stops at the page cap; each conversation is listed once.
+    expect(await channelsMethod(options).run({}, call)).toEqual({ options: [{ id: "C0EXAMPLE01", label: "project-harbour" }, { id: "D0EXAMPLE02" }] })
+    expect(asked.length).toBeGreaterThan(1)
+    expect(asked[1]).toMatchObject({ cursor: "bmV4dDoy" })
   })
 })

@@ -673,7 +673,25 @@ export function reader(options: Pick<EventsToolOptions, "tool" | "owned" | "stat
       throw error
     }
     const content = typeof result.content === "string" ? result.content : (result.content ?? []).flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+    // Slack's MCP answers some tools (the user's profile, their channels) as { result: <Markdown> }, as the output and as
+    // one line of JSON in the text. The Markdown is the answer: hand it on as the text, so its lines read as lines.
+    const markdown = wrapped(result.output) ?? wrapped(parsed(content))
+    if (markdown !== undefined) return { text: markdown }
     return result.output === undefined ? { text: content } : { output: result.output, text: content }
+  }
+}
+
+/** The Markdown of an answer that is nothing but `{ result: <string> }`; any other key leaves the answer as it is. */
+const wrapped = (value: unknown): string | undefined => {
+  const keys = isRecord(value) ? Object.keys(value) : []
+  return isRecord(value) && keys.length === 1 && keys[0] === "result" && typeof value["result"] === "string" ? value["result"] : undefined
+}
+
+const parsed = (text: string): unknown => {
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return undefined
   }
 }
 
